@@ -1,0 +1,5 @@
+{
+  "name": "QuantumLens",
+  "description": "An interactive, AI-powered visualizer for understanding single-qubit quantum mechanics. Experiment with quantum gates and get real-time explanations from Gemini.",
+  "requestFramePermissions": []
+}
