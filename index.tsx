@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { createRoot } from 'react-dom/client';
-import { GoogleGenAI } from '@google/genai';
 import { QuantumNode, EntanglementLink, ChatMessage, NodeType, GateType } from './types';
 import { INITIAL_STATE, applyGate, measure, getProbability, getBlochCoordinates, formatComplex } from './utils/quantumEngine';
 
@@ -193,17 +192,31 @@ const App = () => {
   // AI State
   const [history, setHistory] = useState<ChatMessage[]>([]);
   const [isComputing, setIsComputing] = useState(false);
-  const aiRef = useRef<GoogleGenAI | null>(null);
+  const [aiError, setAiError] = useState<string | null>(null);
+  const [rateLimitCooldown, setRateLimitCooldown] = useState(0);
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const lastApiCallRef = useRef<number>(0);
+  const apiCallCountRef = useRef<number>(0);
+  const rateLimitWindowRef = useRef<number>(Date.now());
+  
+  // Rate limiting constants
+  const MAX_CALLS_PER_MINUTE = 10;
+  const MIN_TIME_BETWEEN_CALLS = 2000; // 2 seconds minimum between calls
+  const RATE_LIMIT_WINDOW = 60000; // 1 minute window
 
-  // Initialize AI
+  // Initialize AI - Using OpenRouter (cost-effective, browser-compatible)
   useEffect(() => {
-    if (process.env.API_KEY) {
-      aiRef.current = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const apiKey = import.meta.env.VITE_OPENROUTER_API_KEY;
+    if (!apiKey) {
+      setHistory(prev => [...prev, {
+        role: 'model',
+        text: "WARNING: OpenRouter API key not configured. AI features will not work. Add OPENROUTER_API_KEY to .env.local",
+        timestamp: Date.now()
+      }]);
     }
     setHistory([{
       role: 'model',
-      text: "I am the OMNISCIENT ARCHITECT. The void is empty. Manifest your reality components. Apply quantum gates to alter their probability. Measure them to fix their fate.",
+      text: "I am the Omniscient Architect. The void is empty. Manifest your reality components. Apply quantum gates to alter their probability. Measure them to fix their fate.",
       timestamp: Date.now()
     }]);
   }, []);
@@ -211,6 +224,22 @@ const App = () => {
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [history, isComputing]);
+
+  // Rate limit cooldown timer
+  useEffect(() => {
+    if (rateLimitCooldown > 0) {
+      const timer = setInterval(() => {
+        setRateLimitCooldown(prev => {
+          if (prev <= 1) {
+            clearInterval(timer);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+      return () => clearInterval(timer);
+    }
+  }, [rateLimitCooldown]);
 
   // --- Actions ---
 
@@ -396,9 +425,56 @@ const App = () => {
       }
   }
 
+  // Rate limiting check
+  const checkRateLimit = (): { allowed: boolean; message?: string } => {
+    const now = Date.now();
+    const timeSinceLastCall = now - lastApiCallRef.current;
+    
+    // Check minimum time between calls
+    if (timeSinceLastCall < MIN_TIME_BETWEEN_CALLS) {
+      const remaining = Math.ceil((MIN_TIME_BETWEEN_CALLS - timeSinceLastCall) / 1000);
+      return { 
+        allowed: false, 
+        message: `Please wait ${remaining} second${remaining > 1 ? 's' : ''} before another computation.` 
+      };
+    }
+    
+    // Reset counter if window expired
+    if (now - rateLimitWindowRef.current > RATE_LIMIT_WINDOW) {
+      apiCallCountRef.current = 0;
+      rateLimitWindowRef.current = now;
+    }
+    
+    // Check calls per minute
+    if (apiCallCountRef.current >= MAX_CALLS_PER_MINUTE) {
+      const remaining = Math.ceil((RATE_LIMIT_WINDOW - (now - rateLimitWindowRef.current)) / 1000);
+      setRateLimitCooldown(remaining);
+      return { 
+        allowed: false, 
+        message: `Rate limit reached. Please wait ${remaining} second${remaining > 1 ? 's' : ''} before trying again.` 
+      };
+    }
+    
+    return { allowed: true };
+  };
+
   const collapseWavefunction = async () => {
     if (nodes.length === 0) return;
+    
+    // Check rate limit
+    const rateLimitCheck = checkRateLimit();
+    if (!rateLimitCheck.allowed) {
+      setAiError(rateLimitCheck.message || 'Rate limit exceeded');
+      setTimeout(() => setAiError(null), 5000);
+      return;
+    }
+    
     setIsComputing(true);
+    setAiError(null);
+    
+    // Update rate limit tracking
+    lastApiCallRef.current = Date.now();
+    apiCallCountRef.current += 1;
     
     // Construct Graph
     const graphDesc = nodes.map(n => {
@@ -439,24 +515,121 @@ const App = () => {
     `;
 
     try {
-        const model = aiRef.current?.models;
-        if (!model) throw new Error("AI not initialized");
+      let retryCount = 0;
+      const maxRetries = 2;
+      let lastError: Error | null = null;
 
-        const response = await model.generateContent({
-            model: 'gemini-2.5-flash',
-            config: {
-                temperature: 1.0, 
-                maxOutputTokens: 500, // Security cap
-            },
-            contents: [{ role: 'user', parts: [{ text: prompt }] }]
-        });
+      while (retryCount <= maxRetries) {
+        try {
+          const apiKey = import.meta.env.VITE_OPENROUTER_API_KEY;
+          if (!apiKey) {
+            throw new Error("OpenRouter API key not configured. Please add OPENROUTER_API_KEY to .env.local");
+          }
 
-        const text = response.text || "Probability cloud too dense. Recalculate.";
-        setHistory(prev => [...prev, { role: 'model', text, timestamp: Date.now(), isComputation: true }]);
-    } catch (e) {
-        setHistory(prev => [...prev, { role: 'model', text: "ERROR: CRITICAL ENTROPY FAILURE. CHECK CONNECTION.", timestamp: Date.now() }]);
+          const model = import.meta.env.VITE_AI_MODEL || 'meta-llama/llama-3.1-8b-instruct:free';
+          
+          // Using fetch for browser compatibility (OpenRouter supports CORS)
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+          
+          const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+              method: 'POST',
+              headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${apiKey}`,
+                  'HTTP-Referer': window.location.origin,
+                  'X-Title': 'Quantum Entangler',
+              },
+              body: JSON.stringify({
+                  model: model,
+                  messages: [
+                      { role: 'user', content: prompt }
+                  ],
+                  temperature: 1.0,
+                  max_tokens: 500, // Security cap
+              }),
+              signal: controller.signal,
+          });
+
+          clearTimeout(timeoutId);
+
+          if (!response.ok) {
+            const errorData = await response.json().catch(() => ({ error: { message: 'Unknown error' } }));
+            
+            // Handle specific error codes
+            if (response.status === 429) {
+              const retryAfter = response.headers.get('Retry-After');
+              const waitTime = retryAfter ? parseInt(retryAfter) : 60;
+              setRateLimitCooldown(waitTime);
+              throw new Error(`Rate limit exceeded. Please wait ${waitTime} seconds.`);
+            }
+            
+            if (response.status === 401) {
+              throw new Error('Invalid API key. Please check your OPENROUTER_API_KEY in .env.local');
+            }
+            
+            if (response.status === 402) {
+              throw new Error('Insufficient credits. Please add credits to your OpenRouter account.');
+            }
+            
+            throw new Error(errorData.error?.message || `API Error (${response.status}): ${response.statusText}`);
+          }
+
+          const data = await response.json();
+          
+          if (!data.choices || !data.choices[0] || !data.choices[0].message) {
+            throw new Error('Invalid response format from API');
+          }
+          
+          const text = data.choices[0].message.content || "Probability cloud too dense. Recalculate.";
+          setHistory(prev => [...prev, { role: 'model', text, timestamp: Date.now(), isComputation: true }]);
+          setAiError(null);
+          return; // Success, exit retry loop
+          
+        } catch (e) {
+          lastError = e instanceof Error ? e : new Error(String(e));
+          
+          // Don't retry on certain errors
+          if (e instanceof Error) {
+            if (e.name === 'AbortError') {
+              throw new Error('Request timeout. Please try again.');
+            }
+            if (e.message.includes('API key') || e.message.includes('401') || e.message.includes('402')) {
+              throw e; // Don't retry auth/credit errors
+            }
+          }
+          
+          retryCount++;
+          
+          if (retryCount <= maxRetries) {
+            // Exponential backoff: wait 1s, 2s, 4s
+            const backoffDelay = Math.pow(2, retryCount - 1) * 1000;
+            await new Promise(resolve => setTimeout(resolve, backoffDelay));
+            continue;
+          }
+        }
+      }
+      
+      // All retries failed
+      const errorMessage = lastError?.message || 'Failed to connect to AI service. Please check your connection and try again.';
+      setAiError(errorMessage);
+      setHistory(prev => [...prev, { 
+        role: 'model', 
+        text: `ERROR: ${errorMessage}`, 
+        timestamp: Date.now() 
+      }]);
+    } catch (outerError) {
+      // Handle errors that break out of retry loop (like auth errors)
+      const errorMessage = outerError instanceof Error ? outerError.message : 'Unknown error occurred';
+      console.error('AI Error:', outerError);
+      setAiError(errorMessage);
+      setHistory(prev => [...prev, { 
+        role: 'model', 
+        text: `ERROR: ${errorMessage}`, 
+        timestamp: Date.now() 
+      }]);
     } finally {
-        setIsComputing(false);
+      setIsComputing(false);
     }
   };
 
@@ -753,18 +926,54 @@ const App = () => {
           <div ref={chatEndRef} />
         </div>
 
-        <div className="p-4 border-t border-slate-800/50 bg-black/20">
+        <div className="p-4 border-t border-slate-800/50 bg-black/20 space-y-3">
+            {/* Error Display */}
+            {aiError && (
+                <div className="bg-red-950/50 border border-red-900 rounded-lg p-3 text-xs text-red-200">
+                    <div className="flex items-start gap-2">
+                        <span className="text-red-400">⚠</span>
+                        <div className="flex-1">
+                            <p className="font-bold mb-1">Error:</p>
+                            <p>{aiError}</p>
+                        </div>
+                        <button 
+                            onClick={() => setAiError(null)}
+                            className="text-red-400 hover:text-red-200"
+                        >
+                            ×
+                        </button>
+                    </div>
+                </div>
+            )}
+            
+            {/* Rate Limit Cooldown Display */}
+            {rateLimitCooldown > 0 && (
+                <div className="bg-amber-950/50 border border-amber-900 rounded-lg p-3 text-xs text-amber-200">
+                    <div className="flex items-center gap-2">
+                        <span className="text-amber-400">⏱</span>
+                        <div>
+                            <p className="font-bold">Rate Limit Cooldown</p>
+                            <p>Please wait {rateLimitCooldown} second{rateLimitCooldown > 1 ? 's' : ''} before next computation</p>
+                        </div>
+                    </div>
+                </div>
+            )}
+            
             {nodes.length > 1 ? (
                 <button 
                     onClick={collapseWavefunction}
-                    disabled={isComputing}
+                    disabled={isComputing || rateLimitCooldown > 0}
                     className="w-full group relative overflow-hidden rounded-lg bg-indigo-600 p-4 transition-all hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed shadow-[0_0_20px_rgba(79,70,229,0.3)] hover:shadow-[0_0_30px_rgba(79,70,229,0.5)]"
                 >
                     <div className="relative z-10 flex items-center justify-center gap-2 font-bold text-white tracking-widest text-sm">
                         <span>COMPUTE REALITY</span>
-                        <svg className="w-4 h-4 transition-transform group-hover:rotate-180 duration-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                        </svg>
+                        {isComputing ? (
+                            <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                        ) : (
+                            <svg className="w-4 h-4 transition-transform group-hover:rotate-180 duration-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                            </svg>
+                        )}
                     </div>
                     {/* Button Glow Effect */}
                     <div className="absolute inset-0 -translate-x-full group-hover:animate-[shimmer_1.5s_infinite] bg-gradient-to-r from-transparent via-white/10 to-transparent z-0" />
