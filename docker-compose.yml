@@ -1,0 +1,39 @@
+version: '3.8'
+
+services:
+  # Development mode
+  dev:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    ports:
+      - "3000:3000"
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - ./.env.local:/app/.env.local:ro
+    # Load environment variables from .env.local file (takes precedence)
+    env_file:
+      - .env.local
+    # Don't set environment section - let .env.local be the source of truth
+    # The env_file above will load all variables from .env.local
+    stdin_open: true
+    tty: true
+
+  # Production mode
+  prod:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        # These will be read from .env.local or environment
+        VITE_OPENROUTER_API_KEY: ${VITE_OPENROUTER_API_KEY:-${OPENROUTER_API_KEY}}
+        VITE_AI_MODEL: ${VITE_AI_MODEL:-${AI_MODEL:-meta-llama/llama-3.2-3b-instruct:free}}
+        OPENROUTER_API_KEY: ${VITE_OPENROUTER_API_KEY:-${OPENROUTER_API_KEY}}
+        AI_MODEL: ${VITE_AI_MODEL:-${AI_MODEL:-meta-llama/llama-3.2-3b-instruct:free}}
+    ports:
+      - "8080:80"
+    env_file:
+      - .env.local
+    restart: unless-stopped
+

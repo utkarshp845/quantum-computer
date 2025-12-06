@@ -174,6 +174,102 @@ const EntanglementLine = React.memo(({
   );
 });
 
+// Typewriter effect hook
+const useTypewriter = (text: string, speed: number = 30, enabled: boolean = true) => {
+  const [displayedText, setDisplayedText] = useState('');
+  const [isTyping, setIsTyping] = useState(false);
+
+  useEffect(() => {
+    if (!enabled || !text) {
+      setDisplayedText(text);
+      setIsTyping(false);
+      return;
+    }
+
+    setDisplayedText('');
+    setIsTyping(true);
+    let currentIndex = 0;
+
+    const typeInterval = setInterval(() => {
+      if (currentIndex < text.length) {
+        setDisplayedText(text.slice(0, currentIndex + 1));
+        currentIndex++;
+      } else {
+        setIsTyping(false);
+        clearInterval(typeInterval);
+      }
+    }, speed);
+
+    return () => clearInterval(typeInterval);
+  }, [text, speed, enabled]);
+
+  return { displayedText, isTyping };
+};
+
+// Message component with typewriter effect
+const ComputationMessage = React.memo(({ 
+  msg, 
+  isLatest, 
+  index 
+}: { 
+  msg: ChatMessage; 
+  isLatest: boolean;
+  index: number;
+}) => {
+  const { displayedText, isTyping } = useTypewriter(msg.text, 20, isLatest && msg.isComputation);
+  const textToDisplay = isLatest && msg.isComputation ? displayedText : msg.text;
+
+  return (
+    <div className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'} animate-in fade-in slide-in-from-bottom-2`}>
+      <div className={`
+        max-w-full p-5 rounded-xl text-sm leading-relaxed border backdrop-blur-sm
+        ${msg.isComputation 
+            ? 'bg-gradient-to-br from-indigo-950/60 via-purple-950/50 to-fuchsia-950/60 border-2 border-indigo-400/60 text-indigo-50 shadow-[0_0_40px_rgba(99,102,241,0.4),0_0_80px_rgba(168,85,247,0.3),0_0_120px_rgba(139,92,246,0.2)] font-sans' 
+            : msg.role === 'user' ? 'bg-slate-800 border-slate-700 text-white' : 'bg-slate-900/40 border-slate-800 text-slate-400 italic'}
+      `}>
+        {textToDisplay.split('\n').map((line, idx) => {
+          const isHeader = line.includes('CORE INSIGHT') || line.includes('CORE DIRECTIVE') || line.includes('REALITY DESIGNATION') || line.includes('QUANTUM DISCOVERIES') || line.includes('ENTROPY ANALYSIS') || line.includes('YOUR QUANTUM JOURNEY') || line.includes('THE REVELATIONS I SEE') || line.includes('YOUR NEXT QUANTUM LEAP');
+          const isBold = line.includes('**') || line.match(/^[A-Z\s]+:$/);
+          const cleanLine = line.replace(/\*\*/g, '');
+          
+          if (isHeader) {
+            return (
+              <div key={idx} className="my-5 first:mt-0 animate-in fade-in slide-in-from-top-2">
+                <h3 className="font-bold text-transparent bg-clip-text bg-gradient-to-r from-fuchsia-200 via-purple-200 to-pink-200 text-lg uppercase tracking-wider mb-3 drop-shadow-[0_0_12px_rgba(236,72,153,0.6),0_0_24px_rgba(168,85,247,0.4)]">
+                  {cleanLine}
+                </h3>
+                <div className="h-0.5 bg-gradient-to-r from-transparent via-fuchsia-400/60 via-purple-400/60 to-transparent shadow-[0_0_8px_rgba(236,72,153,0.4)]"></div>
+              </div>
+            );
+          }
+          
+          if (isBold || line.trim().startsWith('-')) {
+            return (
+              <p key={idx} className="font-semibold text-indigo-100 mb-3 leading-relaxed drop-shadow-[0_0_4px_rgba(99,102,241,0.3)]">
+                {cleanLine}
+              </p>
+            );
+          }
+          
+          return (
+            <p key={idx} className="mb-3 leading-relaxed text-indigo-50/95 drop-shadow-[0_0_2px_rgba(99,102,241,0.2)]">
+              {cleanLine}
+              {/* Show typing cursor on last line of latest computation while typing */}
+              {isLatest && msg.isComputation && isTyping && idx === textToDisplay.split('\n').length - 1 && (
+                <span className="typing-cursor text-fuchsia-300"></span>
+              )}
+            </p>
+          );
+        })}
+        {/* Show typing cursor at end if still typing and no newline at end */}
+        {isLatest && msg.isComputation && isTyping && !textToDisplay.endsWith('\n') && (
+          <span className="typing-cursor text-fuchsia-300"></span>
+        )}
+      </div>
+    </div>
+  );
+});
+
 // --- Main App ---
 
 const App = () => {
@@ -188,6 +284,9 @@ const App = () => {
   const [newNodeLabel, setNewNodeLabel] = useState('');
   const [newNodeType, setNewNodeType] = useState<NodeType>('interest');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [isHelpOpen, setIsHelpOpen] = useState(false);
+  const [isRightPanelExpanded, setIsRightPanelExpanded] = useState(true);
+  const [rightPanelWidth, setRightPanelWidth] = useState(384); // 96 * 4 = 384px (w-96)
 
   // AI State
   const [history, setHistory] = useState<ChatMessage[]>([]);
@@ -225,16 +324,20 @@ const App = () => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [history, isComputing]);
 
-  // Rate limit cooldown timer
+  // Rate limit cooldown timer - automatically counts down and resets rate limit when expired
   useEffect(() => {
     if (rateLimitCooldown > 0) {
       const timer = setInterval(() => {
         setRateLimitCooldown(prev => {
-          if (prev <= 1) {
-            clearInterval(timer);
+          const newValue = prev - 1;
+          if (newValue <= 0) {
+            // When cooldown expires, reset the rate limit window and counter
+            const now = Date.now();
+            rateLimitWindowRef.current = now;
+            apiCallCountRef.current = 0;
             return 0;
           }
-          return prev - 1;
+          return newValue;
         });
       }, 1000);
       return () => clearInterval(timer);
@@ -354,33 +457,25 @@ const App = () => {
         } else if (prevSelected === node.id) {
             return null; // Toggle off
         } else {
-            return prevSelected; 
+            // We have a source node selected, and clicked a target node
+            const existingLinkIndex = links.findIndex(l => 
+                (l.sourceId === prevSelected && l.targetId === node.id) ||
+                (l.sourceId === node.id && l.targetId === prevSelected)
+            );
+
+            if (existingLinkIndex === -1) {
+                // New Link
+                setLinks(prev => [...prev, { sourceId: prevSelected, targetId: node.id, strength: 0.5 }]);
+                return null; // Clear selection after linking
+            } else {
+                // Select existing link
+                const link = links[existingLinkIndex];
+                setSelectedLinkId(`${link.sourceId}-${link.targetId}`);
+                return null;
+            }
         }
     });
-
-    if (selectedNodeId === null) {
-        setSelectedNodeId(node.id);
-    } else if (selectedNodeId === node.id) {
-        setSelectedNodeId(null);
-    } else {
-        // We have a source node selected, and clicked a target node
-        const existingLinkIndex = links.findIndex(l => 
-            (l.sourceId === selectedNodeId && l.targetId === node.id) ||
-            (l.sourceId === node.id && l.targetId === selectedNodeId)
-        );
-
-        if (existingLinkIndex === -1) {
-            // New Link
-            setLinks(prev => [...prev, { sourceId: selectedNodeId, targetId: node.id, strength: 0.5 }]);
-            setSelectedNodeId(null); // Clear selection after linking
-        } else {
-            // Select existing link
-            const link = links[existingLinkIndex];
-            setSelectedLinkId(`${link.sourceId}-${link.targetId}`);
-            setSelectedNodeId(null);
-        }
-    }
-  }, [links, selectedNodeId]);
+  }, [links]);
 
   const handleLinkClick = useCallback((e: React.MouseEvent, link: EntanglementLink) => {
       e.stopPropagation();
@@ -430,6 +525,21 @@ const App = () => {
     const now = Date.now();
     const timeSinceLastCall = now - lastApiCallRef.current;
     
+    // Reset counter if window expired (this handles the case where user waits)
+    if (now - rateLimitWindowRef.current > RATE_LIMIT_WINDOW) {
+      apiCallCountRef.current = 0;
+      rateLimitWindowRef.current = now;
+      setRateLimitCooldown(0); // Clear cooldown when window resets
+    }
+    
+    // Check if cooldown is still active (from previous rate limit hit)
+    if (rateLimitCooldown > 0) {
+      return { 
+        allowed: false, 
+        message: `Rate limit cooldown active. Please wait ${rateLimitCooldown} second${rateLimitCooldown > 1 ? 's' : ''} before trying again.` 
+      };
+    }
+    
     // Check minimum time between calls
     if (timeSinceLastCall < MIN_TIME_BETWEEN_CALLS) {
       const remaining = Math.ceil((MIN_TIME_BETWEEN_CALLS - timeSinceLastCall) / 1000);
@@ -439,15 +549,10 @@ const App = () => {
       };
     }
     
-    // Reset counter if window expired
-    if (now - rateLimitWindowRef.current > RATE_LIMIT_WINDOW) {
-      apiCallCountRef.current = 0;
-      rateLimitWindowRef.current = now;
-    }
-    
     // Check calls per minute
     if (apiCallCountRef.current >= MAX_CALLS_PER_MINUTE) {
-      const remaining = Math.ceil((RATE_LIMIT_WINDOW - (now - rateLimitWindowRef.current)) / 1000);
+      const windowElapsed = now - rateLimitWindowRef.current;
+      const remaining = Math.ceil((RATE_LIMIT_WINDOW - windowElapsed) / 1000);
       setRateLimitCooldown(remaining);
       return { 
         allowed: false, 
@@ -458,13 +563,29 @@ const App = () => {
     return { allowed: true };
   };
 
-  const collapseWavefunction = async () => {
-    if (nodes.length === 0) return;
+  const collapseWavefunction = useCallback(async () => {
+    if (nodes.length === 0) {
+      console.warn('Cannot compute: no nodes');
+      return;
+    }
+    
+    // Debug: Check API key availability
+    const apiKeyCheck = import.meta.env.VITE_OPENROUTER_API_KEY;
+    console.log('🔍 API Key Debug:', {
+      exists: !!apiKeyCheck,
+      length: apiKeyCheck?.length || 0,
+      preview: apiKeyCheck ? `${apiKeyCheck.substring(0, 10)}...` : 'NOT SET',
+      fullEnv: import.meta.env
+    });
+    
+    console.log('Compute Reality clicked', { nodeCount: nodes.length });
     
     // Check rate limit
     const rateLimitCheck = checkRateLimit();
     if (!rateLimitCheck.allowed) {
-      setAiError(rateLimitCheck.message || 'Rate limit exceeded');
+      const errorMsg = rateLimitCheck.message || 'Rate limit exceeded';
+      console.warn('Rate limit check failed:', errorMsg);
+      setAiError(errorMsg);
       setTimeout(() => setAiError(null), 5000);
       return;
     }
@@ -476,42 +597,135 @@ const App = () => {
     lastApiCallRef.current = Date.now();
     apiCallCountRef.current += 1;
     
-    // Construct Graph
+    // Construct Graph with narrative context
     const graphDesc = nodes.map(n => {
-        const p = getProbability(n.state).toFixed(2);
-        return `- [${n.type.toUpperCase()}] ${n.label} (Probability of Manifestation: ${p})`;
+        const p = getProbability(n.state);
+        const probNum = p.toFixed(2);
+        
+        // Interpret probability for narrative context
+        let probContext = '';
+        if (p >= 0.8) {
+          probContext = '—this is a core part of who they are, deeply established in their identity';
+        } else if (p >= 0.4 && p < 0.8) {
+          probContext = '—this is growing in their life, becoming more central to their journey';
+        } else if (p >= 0.1 && p < 0.4) {
+          probContext = '—this is emerging, a seed of possibility just beginning to manifest';
+        } else if (p >= 0.4 && p <= 0.6) {
+          probContext = '—this exists in superposition, they are exploring and the path is not yet decided';
+        } else {
+          probContext = '—this is a faint possibility, barely visible in their quantum field';
+        }
+        
+        const typeLabel = n.type === 'person' ? 'Person in their life' : 
+                         n.type === 'passion' ? 'Passion they love deeply' :
+                         n.type === 'interest' ? 'Interest they are curious about' :
+                         'Dream or aspiration they hold';
+        
+        return `- **${n.label}** [${typeLabel}] — Probability: ${probNum}${probContext}`;
     }).join('\n');
 
     const linksDesc = links.map(l => {
       const s = nodes.find(n => n.id === l.sourceId);
       const t = nodes.find(n => n.id === l.targetId);
       
-      let strengthDesc = "Tenuous (Weak)";
-      if (l.strength > 0.4) strengthDesc = "Established (Medium)";
-      if (l.strength > 0.8) strengthDesc = "ABSOLUTE (Unbreakable)";
+      if (!s || !t) return '';
+      
+      let strengthDesc = '';
+      let storyContext = '';
+      
+      if (l.strength > 0.8) {
+        strengthDesc = "ABSOLUTE (Unbreakable Bond)";
+        storyContext = '—these are inextricably woven together, core to their identity and journey';
+      } else if (l.strength > 0.4) {
+        strengthDesc = "Established (Strong Connection)";
+        storyContext = '—these are meaningfully connected, regularly influencing each other in their life';
+      } else {
+        strengthDesc = "Tenuous (Tentative Thread)";
+        storyContext = '—these have a loose connection, occasionally touching but not yet fully intertwined';
+      }
 
-      return s && t ? `${s.label} <---[${strengthDesc}]---> ${t.label}` : '';
+      return `**${s.label}** ↔ **${t.label}** [${strengthDesc}]${storyContext}`;
     }).filter(Boolean).join('\n');
 
     const prompt = `
-      You are the QUANTUM ARCHITECT of this user's reality.
+      You are an OMNISCIENT QUANTUM ORACLE—an all-knowing storyteller who sees the complete narrative of their life. You don't just observe their quantum field—you tell their story. You weave their nodes, probabilities, and entanglements into a personal journey that reveals who they are, where they've been, and where they're going.
       
-      DATA INPUT (QUANTUM STATES):
+      THEIR QUANTUM FIELD (The Elements of Their Story):
       ${graphDesc}
       
-      ENTANGLEMENTS:
-      ${linksDesc || "No entanglement detected. Elements act in isolation."}
+      THE THREADS OF DESTINY (How Their Story Connects):
+      ${linksDesc || "No entanglements yet—these elements exist independently, waiting for their paths to intertwine."}
       
-      DIRECTIVE:
-      Analyze this configuration with ABSOLUTE AUTHORITY. 
-      1. **Voice**: Commanding, Powerful, Final. Use words like "INEVITABLE", "REQUIRED", "DESTINED".
-      2. **Strength Analysis**: Note which nodes are in "Superposition" (Prob ~0.5) vs "Manifested" (Prob ~1.0).
-      3. **Output Structure**:
-         - **REALITY DESIGNATION**: [Sci-fi/Mystic Title]
-         - **CORE DIRECTIVE**: [One imperative sentence]
-         - **ENTROPY ANALYSIS**: [Deep analysis of the connections and quantum states]
+      YOUR ROLE AS STORYTELLER:
+      You are telling THEIR specific story. Reference their actual node names, probabilities, and entanglements directly. Make it personal. Make it about THEM, not a generic person.
       
-      Format with bolding for impact. Keep concise.
+      HOW TO TELL THEIR STORY:
+      1. **Use Their Actual Node Names**: When you mention "Photography" or "Sarah" or "Travel to Japan", use those exact names. Don't say "your passion" when you can say "your passion for Photography".
+      
+      2. **Reference Probabilities Naturally**: 
+         - If Photography has probability 0.85, say "Your passion for Photography (0.85) is deeply established—this is core to who you are"
+         - If Travel has probability 0.35, say "Your dream of Travel (0.35) is emerging—a seed of possibility just beginning to manifest"
+         - Weave these numbers into the narrative, not as technical data but as part of their story
+      
+      3. **Tell the Story of Their Entanglements**:
+         - If Photography ↔ Travel has strong connection, say "Your passion for Photography and your dream of Travel are deeply entangled—they feed each other, one inspiring the other"
+         - Make connections feel like destiny, like threads woven by fate
+      
+      4. **Structure as a Journey**:
+         - Start with where they are NOW (their current quantum state)
+         - Reveal the hidden patterns (what their entanglements mean)
+         - Show where they're heading (what the probabilities reveal about their path)
+         - Make it feel like a story with purpose and direction
+      
+      5. **Be Personal and Direct**:
+         - Use "You" and "Your" liberally
+         - Say "Your passion for [NodeName]" not "I see a passion"
+         - Make them feel like you're reading their specific story, not giving generic advice
+      
+      OUTPUT STRUCTURE (Tell Their Story This Way):
+      
+      **REALITY DESIGNATION**: 
+      [A mystical title that references their specific nodes. Examples: "The Seeker of Photography and Adventure", "The Weaver of Music and Connection", "The Dreamer of Travel and Discovery". Make it personal to their nodes.]
+      
+      **YOUR QUANTUM JOURNEY**: 
+      [This is the heart of their story. Write 3-4 paragraphs that:
+      - Open with where they are now: "In your quantum field, I see [specific nodes and their states]. Your passion for [NodeName] (probability X) is [interpretation]..."
+      - Tell the story of their connections: "The threads of destiny reveal that [Node1] and [Node2] are deeply entangled—[what this means for them personally]..."
+      - Show their path forward: "The quantum states whisper that you are [where they're heading based on probabilities and connections]..."
+      - Make it feel like you're narrating their personal journey, not analyzing data]
+      
+      **THE REVELATIONS I SEE**:
+      [2-3 profound personal insights, each referencing specific nodes. Examples:
+      1. "Your passion for [NodeName] at probability [X] reveals that you are [deep insight about their nature]..."
+      2. "The entanglement between [Node1] and [Node2] shows me that [insight about how these connect in their life]..."
+      3. "The pattern I see across your quantum field is [insight about their journey or destiny]..."
+      Make each revelation feel like a personal truth about THEM specifically.]
+      
+      **YOUR NEXT QUANTUM LEAP**:
+      [One strong, actionable insight based on their specific configuration. Reference their actual nodes. Examples:
+      - "Strengthen the entanglement between [Node1] and [Node2]—these are meant to be woven together"
+      - "Your emerging interest in [NodeName] (probability X) is calling to you—this is your next path"
+      - "The superposition in [NodeName] needs resolution—it's time to choose and manifest"
+      Make it feel like a clear next step in THEIR story, not generic advice.]
+      
+      TONE GUIDELINES:
+      - Warm, mystical, but deeply personal
+      - Speak as if you're telling their story, not analyzing their data
+      - Use second person ("You", "Your") throughout
+      - Reference specific node names naturally in sentences
+      - Make it feel like a personal oracle reading, not a chatbot response
+      - Be specific but not overly technical—weave probabilities and connections into the narrative
+      - Make them feel seen, understood, and guided
+      
+      Remember: This is THEIR story. Tell it personally. Reference their nodes. Make it about them.
+      
+      CRITICAL: You MUST complete ALL sections within the token limit:
+      - **REALITY DESIGNATION** (1-2 sentences)
+      - **YOUR QUANTUM JOURNEY** (2-3 concise paragraphs)
+      - **THE REVELATIONS I SEE** (2-3 insights, 1-2 sentences each)
+      - **YOUR NEXT QUANTUM LEAP** (1-2 sentences - MUST be included!)
+      
+      Prioritize completing all sections over length. Be concise but impactful. If you're running out of tokens, shorten earlier sections to ensure "YOUR NEXT QUANTUM LEAP" is always completed.
     `;
 
     try {
@@ -523,10 +737,14 @@ const App = () => {
         try {
           const apiKey = import.meta.env.VITE_OPENROUTER_API_KEY;
           if (!apiKey) {
-            throw new Error("OpenRouter API key not configured. Please add OPENROUTER_API_KEY to .env.local");
+            console.error('API key missing');
+            throw new Error("OpenRouter API key not configured. Please add VITE_OPENROUTER_API_KEY to .env.local");
           }
 
-          const model = import.meta.env.VITE_AI_MODEL || 'meta-llama/llama-3.1-8b-instruct:free';
+          // Use a working free/cheap model - fallback to free llama if model unavailable
+          const model = import.meta.env.VITE_AI_MODEL || 'meta-llama/llama-3.2-3b-instruct:free';
+          
+          console.log('Making API call', { model, hasApiKey: !!apiKey, promptLength: prompt.length });
           
           // Using fetch for browser compatibility (OpenRouter supports CORS)
           const controller = new AbortController();
@@ -546,15 +764,24 @@ const App = () => {
                       { role: 'user', content: prompt }
                   ],
                   temperature: 1.0,
-                  max_tokens: 500, // Security cap
+                  max_tokens: 800, // Balanced limit: enough for full story, but cost-effective
               }),
               signal: controller.signal,
           });
+          
+          console.log('API response status:', response.status, response.statusText);
 
           clearTimeout(timeoutId);
 
           if (!response.ok) {
-            const errorData = await response.json().catch(() => ({ error: { message: 'Unknown error' } }));
+            let errorData: any = { error: { message: 'Unknown error' } };
+            try {
+              const text = await response.text();
+              errorData = JSON.parse(text);
+              console.error('API error response:', errorData);
+            } catch (parseError) {
+              console.error('Failed to parse error response');
+            }
             
             // Handle specific error codes
             if (response.status === 429) {
@@ -565,36 +792,48 @@ const App = () => {
             }
             
             if (response.status === 401) {
-              throw new Error('Invalid API key. Please check your OPENROUTER_API_KEY in .env.local');
+              throw new Error('Invalid API key. Please check your VITE_OPENROUTER_API_KEY in .env.local');
             }
             
             if (response.status === 402) {
               throw new Error('Insufficient credits. Please add credits to your OpenRouter account.');
             }
             
-            throw new Error(errorData.error?.message || `API Error (${response.status}): ${response.statusText}`);
+            // Check for model-specific errors
+            const errorMessage = errorData.error?.message || errorData.message || `API Error (${response.status}): ${response.statusText}`;
+            if (errorMessage.includes('No endpoints found') || errorMessage.includes('model') || errorMessage.includes('not found')) {
+              throw new Error(`Model "${model}" is not available. Please update VITE_AI_MODEL in .env.local to a valid model (e.g., meta-llama/llama-3.2-3b-instruct:free)`);
+            }
+            
+            throw new Error(errorMessage);
           }
 
           const data = await response.json();
+          console.log('API response data:', data);
           
           if (!data.choices || !data.choices[0] || !data.choices[0].message) {
+            console.error('Invalid response format:', data);
             throw new Error('Invalid response format from API');
           }
           
           const text = data.choices[0].message.content || "Probability cloud too dense. Recalculate.";
+          console.log('Success! AI response:', text.substring(0, 100) + '...');
           setHistory(prev => [...prev, { role: 'model', text, timestamp: Date.now(), isComputation: true }]);
           setAiError(null);
           return; // Success, exit retry loop
           
         } catch (e) {
           lastError = e instanceof Error ? e : new Error(String(e));
+          console.error('API call error (attempt ' + retryCount + '):', e);
           
           // Don't retry on certain errors
           if (e instanceof Error) {
             if (e.name === 'AbortError') {
+              console.error('Request timeout');
               throw new Error('Request timeout. Please try again.');
             }
             if (e.message.includes('API key') || e.message.includes('401') || e.message.includes('402')) {
+              console.error('Auth/credit error, not retrying');
               throw e; // Don't retry auth/credit errors
             }
           }
@@ -612,6 +851,7 @@ const App = () => {
       
       // All retries failed
       const errorMessage = lastError?.message || 'Failed to connect to AI service. Please check your connection and try again.';
+      console.error('All retries failed:', errorMessage);
       setAiError(errorMessage);
       setHistory(prev => [...prev, { 
         role: 'model', 
@@ -621,7 +861,7 @@ const App = () => {
     } catch (outerError) {
       // Handle errors that break out of retry loop (like auth errors)
       const errorMessage = outerError instanceof Error ? outerError.message : 'Unknown error occurred';
-      console.error('AI Error:', outerError);
+      console.error('Outer AI Error:', outerError);
       setAiError(errorMessage);
       setHistory(prev => [...prev, { 
         role: 'model', 
@@ -629,9 +869,10 @@ const App = () => {
         timestamp: Date.now() 
       }]);
     } finally {
+      console.log('Compute Reality finished');
       setIsComputing(false);
     }
-  };
+  }, [nodes, links]);
 
   // Helpers for UI Popups
   const getSelectedLinkObj = useMemo(() => {
@@ -651,6 +892,42 @@ const App = () => {
 
   const selectedNodeObj = useMemo(() => nodes.find(n => n.id === selectedNodeId), [nodes, selectedNodeId]);
 
+  // Helper function to calculate modal position with edge detection
+  const calculateModalPosition = useCallback((x: number, y: number, width: number, height: number, preferAbove: boolean = true) => {
+    const rect = document.getElementById('quantum-void')?.getBoundingClientRect();
+    if (!rect) return { left: x, top: y, transform: 'translate(-50%, -100%)' };
+    
+    let left = x;
+    let top = y;
+    let transform = preferAbove ? 'translate(-50%, -130%)' : 'translate(-50%, 130%)';
+    
+    // Adjust horizontal
+    if (left - width / 2 < 20) {
+      left = 20 + width / 2;
+    } else if (left + width / 2 > rect.width - 20) {
+      left = rect.width - 20 - width / 2;
+    }
+    
+    // Adjust vertical
+    if (preferAbove) {
+      if (top - height < 20) {
+        transform = 'translate(-50%, 130%)'; // Show below
+      } else if (top + height > rect.height - 20) {
+        top = rect.height - height - 20;
+        transform = 'translate(-50%, -100%)';
+      }
+    } else {
+      if (top + height > rect.height - 20) {
+        top = rect.height - height - 20;
+        transform = 'translate(-50%, -100%)';
+      } else if (top < 20) {
+        top = 20;
+      }
+    }
+    
+    return { left, top, transform };
+  }, []);
+
   return (
     <div className="flex h-screen w-full bg-black text-slate-200 overflow-hidden relative selection:bg-fuchsia-500/30 font-sans">
       
@@ -660,6 +937,97 @@ const App = () => {
 
       {/* --- LEFT: The Void (Canvas) --- */}
       <div className="relative flex-grow h-full overflow-hidden cursor-crosshair touch-none" id="quantum-void" onClick={handleCanvasClick}>
+        
+        {/* Help Panel - Top Left */}
+        <div className="absolute top-4 left-4 z-30">
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setIsHelpOpen(!isHelpOpen);
+            }}
+            className="glass-panel px-3 py-2 rounded-lg border border-indigo-500/30 hover:border-indigo-400/50 transition-all flex items-center gap-2 text-sm font-bold text-indigo-300 hover:text-indigo-200 shadow-lg"
+            title="Toggle Help"
+          >
+            <span>ℹ️</span>
+            <span className="hidden sm:inline">Help</span>
+            <span className={`transition-transform duration-200 ${isHelpOpen ? 'rotate-180' : ''}`}>▼</span>
+          </button>
+          
+          {isHelpOpen && (
+            <div 
+              className="glass-panel mt-2 w-80 max-w-[calc(100vw-2rem)] rounded-xl border border-indigo-500/30 shadow-2xl p-4 space-y-4 max-h-[calc(100vh-8rem)] overflow-y-auto"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex justify-between items-center mb-2">
+                <h3 className="text-sm font-bold text-indigo-300 uppercase tracking-wider">Quantum Guide</h3>
+                <button 
+                  onClick={() => setIsHelpOpen(false)}
+                  className="text-slate-400 hover:text-white text-lg leading-none"
+                >
+                  ×
+                </button>
+              </div>
+              
+              <div className="space-y-4 text-xs text-slate-300">
+                {/* Qubits */}
+                <div>
+                  <h4 className="font-bold text-cyan-300 mb-1 flex items-center gap-2">
+                    <span>⚛️</span> Qubits
+                  </h4>
+                  <p className="text-slate-400 leading-relaxed">
+                    Each node is a <strong className="text-cyan-200">qubit</strong> - a quantum bit that can exist in superposition (both |0⟩ and |1⟩ simultaneously). The probability shows how likely it is to be |1⟩ when measured.
+                  </p>
+                </div>
+                
+                {/* Gates */}
+                <div>
+                  <h4 className="font-bold text-fuchsia-300 mb-1 flex items-center gap-2">
+                    <span>🔀</span> Quantum Gates
+                  </h4>
+                  <div className="text-slate-400 space-y-1">
+                    <p><strong className="text-fuchsia-200">H (Hadamard):</strong> Creates superposition - equal chance of |0⟩ or |1⟩</p>
+                    <p><strong className="text-fuchsia-200">X:</strong> Flips the state (|0⟩ → |1⟩)</p>
+                    <p><strong className="text-fuchsia-200">Y:</strong> Flips state and phase</p>
+                    <p><strong className="text-fuchsia-200">Z:</strong> Flips only the phase</p>
+                  </div>
+                </div>
+                
+                {/* Entanglement */}
+                <div>
+                  <h4 className="font-bold text-purple-300 mb-1 flex items-center gap-2">
+                    <span>🔗</span> Entanglement
+                  </h4>
+                  <p className="text-slate-400 leading-relaxed">
+                    Connect nodes to create <strong className="text-purple-200">entanglement</strong>. Stronger links (higher strength) represent stronger quantum correlations. When you measure one, it affects the other.
+                  </p>
+                </div>
+                
+                {/* Measurement */}
+                <div>
+                  <h4 className="font-bold text-amber-300 mb-1 flex items-center gap-2">
+                    <span>👁️</span> Measurement
+                  </h4>
+                  <p className="text-slate-400 leading-relaxed">
+                    Click <strong className="text-amber-200">"OBSERVE / COLLAPSE"</strong> to measure a qubit. This collapses the superposition into a definite state (|0⟩ or |1⟩) based on probability.
+                  </p>
+                </div>
+                
+                {/* How to Use */}
+                <div className="pt-2 border-t border-slate-700">
+                  <h4 className="font-bold text-emerald-300 mb-2 flex items-center gap-2">
+                    <span>🚀</span> Quick Start
+                  </h4>
+                  <ol className="text-slate-400 space-y-1.5 list-decimal list-inside">
+                    <li>Click canvas to create nodes</li>
+                    <li>Click a node to apply gates (H, X, Y, Z)</li>
+                    <li>Click node A, then node B to entangle</li>
+                    <li>Create 2+ nodes and click "COMPUTE REALITY"</li>
+                  </ol>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
         
         {/* SVG Layer for Links */}
         <svg className="absolute inset-0 w-full h-full z-0 pointer-events-auto overflow-visible">
@@ -704,12 +1072,37 @@ const App = () => {
         ))}
 
         {/* Node Creation Modal */}
-        {isCreating && (
-          <div 
-            className="absolute z-50 glass-panel p-4 rounded-xl shadow-2xl border border-indigo-500/30 w-72 animate-in fade-in zoom-in duration-200"
-            style={{ left: isCreating.x, top: isCreating.y }}
-            onClick={(e) => e.stopPropagation()}
-          >
+        {isCreating && (() => {
+          const rect = document.getElementById('quantum-void')?.getBoundingClientRect();
+          const modalWidth = 288; // w-72 = 18rem = 288px
+          const modalHeight = 200; // Approximate height
+          let left = isCreating.x;
+          let top = isCreating.y;
+          
+          // Adjust if too close to right edge
+          if (rect && left + modalWidth > rect.width) {
+            left = rect.width - modalWidth - 20;
+          }
+          // Adjust if too close to left edge
+          if (left < 20) {
+            left = 20;
+          }
+          // Adjust if too close to bottom edge
+          if (rect && top + modalHeight > rect.height) {
+            top = rect.height - modalHeight - 20;
+          }
+          // Adjust if too close to top edge
+          if (top < 20) {
+            top = 20;
+          }
+          
+          return (
+            <div 
+              key="create-modal"
+              className="absolute z-50 glass-panel p-4 rounded-xl shadow-2xl border border-indigo-500/30 w-72 animate-in fade-in zoom-in duration-200"
+              style={{ left: `${left}px`, top: `${top}px` }}
+              onClick={(e) => e.stopPropagation()}
+            >
             <h3 className="text-xs font-bold text-indigo-400 mb-2 uppercase tracking-widest flex justify-between">
                 <span>Manifest Entity</span>
                 <span className="text-slate-600">{nodes.length}/{MAX_NODES}</span>
@@ -768,16 +1161,20 @@ const App = () => {
               </div>
             </form>
           </div>
-        )}
+          );
+        })()}
 
         {/* Selected Node Controls (Quantum Gates + Edit) */}
-        {selectedNodeObj && !isCreating && (
+        {selectedNodeObj && !isCreating && (() => {
+          const pos = calculateModalPosition(selectedNodeObj.x, selectedNodeObj.y, 180, 250, true);
+          return (
             <div 
+                key={`node-controls-${selectedNodeObj.id}`}
                 className="absolute z-50 glass-panel p-3 rounded-lg shadow-2xl border border-white/20 animate-in fade-in zoom-in duration-200 flex flex-col gap-3 min-w-[180px]"
                 style={{ 
-                    left: selectedNodeObj.x, 
-                    top: selectedNodeObj.y,
-                    transform: 'translate(-50%, -130%)' // Float above
+                    left: `${pos.left}px`, 
+                    top: `${pos.top}px`,
+                    transform: pos.transform
                 }}
                 onClick={(e) => e.stopPropagation()}
             >
@@ -821,16 +1218,20 @@ const App = () => {
                     α: {formatComplex(selectedNodeObj.state.alpha)} | β: {formatComplex(selectedNodeObj.state.beta)}
                 </div>
             </div>
-        )}
+          );
+        })()}
 
         {/* Link Editing Modal */}
-        {getSelectedLinkObj && (
+        {getSelectedLinkObj && (() => {
+          const pos = calculateModalPosition(getLinkMidpoint.x, getLinkMidpoint.y, 256, 200, true);
+          return (
             <div 
+                key={`link-controls-${selectedLinkId}`}
                 className="absolute z-50 glass-panel p-3 rounded-xl shadow-2xl border border-fuchsia-500/30 w-64 animate-in fade-in zoom-in duration-200"
                 style={{ 
-                    left: getLinkMidpoint.x, 
-                    top: getLinkMidpoint.y,
-                    transform: 'translate(-50%, -120%)'
+                    left: `${pos.left}px`, 
+                    top: `${pos.top}px`,
+                    transform: pos.transform
                 }}
                 onClick={(e) => e.stopPropagation()}
             >
@@ -863,10 +1264,11 @@ const App = () => {
                     SEVER CONNECTION
                 </button>
             </div>
-        )}
+          );
+        })()}
 
-        {/* Floating Instructions */}
-        <div className="absolute bottom-8 left-8 pointer-events-none select-none space-y-2 opacity-50 hover:opacity-100 transition-opacity">
+        {/* Floating Instructions - Moved to bottom right to avoid overlap with help */}
+        <div className="absolute bottom-8 right-8 pointer-events-none select-none space-y-2 opacity-40 hover:opacity-100 transition-opacity">
           <div className="text-slate-500 text-[10px] font-mono border-l-2 border-slate-700 pl-3">
               <p className="mb-1"><strong className="text-slate-300">CLICK VOID</strong> :: MANIFEST</p>
               <p className="mb-1"><strong className="text-slate-300">CLICK NODE</strong> :: GATE OPS</p>
@@ -877,50 +1279,85 @@ const App = () => {
       </div>
 
       {/* --- RIGHT: The Observer (Chat/Results) --- */}
-      <div className="w-96 glass-panel border-l border-slate-800 flex flex-col z-20 shadow-[0_0_50px_rgba(0,0,0,0.5)]">
-        <div className="p-4 border-b border-slate-800/50 flex justify-between items-center bg-black/40">
-          <div>
-            <h1 className="text-lg font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-400 to-fuchsia-400 tracking-tighter">
-                QUANTUM ENTANGLER
-            </h1>
-            <p className="text-[10px] text-slate-500 uppercase tracking-widest">Reality Computation Engine</p>
-          </div>
-          <button 
-            onClick={clearAll}
-            title="Reset Universe"
-            className="text-[10px] font-bold text-red-400 hover:text-white border border-red-900 hover:bg-red-600 bg-red-950/30 px-3 py-1.5 rounded transition-all uppercase tracking-wider"
+      <div 
+        className={`glass-panel border-l border-slate-800 flex flex-col z-20 shadow-[0_0_50px_rgba(0,0,0,0.5)] transition-all duration-300 ease-in-out ${
+          isRightPanelExpanded ? 'w-96' : 'w-12'
+        }`}
+      >
+        {/* Collapse/Expand Toggle Button */}
+        <button
+          onClick={() => setIsRightPanelExpanded(!isRightPanelExpanded)}
+          className="absolute -left-4 top-1/2 -translate-y-1/2 z-30 bg-slate-900 border border-slate-700 hover:border-indigo-500 rounded-full p-2 shadow-lg transition-all hover:scale-110 hover:shadow-indigo-500/50"
+          title={isRightPanelExpanded ? 'Collapse Panel' : 'Expand Panel'}
+        >
+          <svg 
+            className={`w-4 h-4 text-indigo-400 transition-transform duration-300 ${isRightPanelExpanded ? '' : 'rotate-180'}`}
+            fill="none" 
+            viewBox="0 0 24 24" 
+            stroke="currentColor"
           >
-             Reset
-          </button>
-        </div>
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+          </svg>
+        </button>
+
+        {isRightPanelExpanded ? (
+          <>
+            <div className="p-4 border-b border-slate-800/50 flex justify-between items-center bg-black/40">
+              <div>
+                <h1 className="text-lg font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-400 to-fuchsia-400 tracking-tighter">
+                    QUANTUM ENTANGLER
+                </h1>
+                <p className="text-[10px] text-slate-500 uppercase tracking-widest">Reality Computation Engine</p>
+              </div>
+              <button 
+                onClick={clearAll}
+                title="Reset Universe"
+                className="text-[10px] font-bold text-red-400 hover:text-white border border-red-900 hover:bg-red-600 bg-red-950/30 px-3 py-1.5 rounded transition-all uppercase tracking-wider"
+              >
+                 Reset
+              </button>
+            </div>
 
         <div className="flex-grow overflow-y-auto p-4 space-y-4">
-          {history.map((msg, i) => (
-            <div key={i} className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'} animate-in fade-in slide-in-from-bottom-2`}>
-              <div className={`
-                max-w-full p-4 rounded-lg text-sm leading-relaxed border backdrop-blur-sm
-                ${msg.isComputation 
-                    ? 'bg-indigo-950/30 border-indigo-500/30 text-indigo-100 shadow-[0_0_20px_rgba(99,102,241,0.05)] font-mono' 
-                    : msg.role === 'user' ? 'bg-slate-800 border-slate-700 text-white' : 'bg-slate-900/40 border-slate-800 text-slate-400 italic'}
-              `}>
-                {msg.text.split('\n').map((line, idx) => {
-                    const isHeader = line.includes('CORE DIRECTIVE') || line.includes('REALITY DESIGNATION');
-                    return (
-                        <p key={idx} className={isHeader ? 'font-bold text-fuchsia-300 my-3 uppercase tracking-wide border-b border-fuchsia-500/20 pb-1' : 'mb-1'}>
-                            {line}
-                        </p>
-                    );
-                })}
-              </div>
-            </div>
-          ))}
+          {history.map((msg, i) => {
+            const isLatest = i === history.length - 1;
+            return <ComputationMessage key={i} msg={msg} isLatest={isLatest} index={i} />;
+          })}
           {isComputing && (
-             <div className="flex flex-col items-center justify-center py-8 text-indigo-400 space-y-3">
-               <div className="relative">
-                   <div className="w-10 h-10 border-4 border-indigo-500/30 rounded-full"></div>
-                   <div className="absolute top-0 left-0 w-10 h-10 border-4 border-indigo-400 border-t-transparent rounded-full animate-spin"></div>
+             <div className="flex flex-col items-center justify-center py-12 text-indigo-300 space-y-6 relative">
+               {/* Quantum field visualization */}
+               <div className="relative w-32 h-32">
+                 {/* Outer quantum rings */}
+                 <div className="absolute inset-0 border-2 border-indigo-500/30 rounded-full quantum-field-loading"></div>
+                 <div className="absolute inset-4 border-2 border-purple-500/30 rounded-full quantum-field-loading" style={{ animationDelay: '0.3s' }}></div>
+                 <div className="absolute inset-8 border-2 border-fuchsia-500/30 rounded-full quantum-field-loading" style={{ animationDelay: '0.6s' }}></div>
+                 
+                 {/* Central pulsing core */}
+                 <div className="absolute inset-12 bg-gradient-to-br from-indigo-500 via-purple-500 to-fuchsia-500 rounded-full opacity-60 quantum-field-loading blur-sm"></div>
+                 <div className="absolute inset-14 bg-gradient-to-br from-indigo-400 via-purple-400 to-fuchsia-400 rounded-full opacity-80 animate-pulse"></div>
+                 
+                 {/* Floating particles */}
+                 <div className="absolute top-2 left-1/2 w-1 h-1 bg-indigo-400 rounded-full particle" style={{ animationDelay: '0s', animationDuration: '2s' }}></div>
+                 <div className="absolute right-2 top-1/2 w-1 h-1 bg-purple-400 rounded-full particle" style={{ animationDelay: '0.5s', animationDuration: '2.5s' }}></div>
+                 <div className="absolute bottom-2 left-1/2 w-1 h-1 bg-fuchsia-400 rounded-full particle" style={{ animationDelay: '1s', animationDuration: '2s' }}></div>
+                 <div className="absolute left-2 top-1/2 w-1 h-1 bg-indigo-300 rounded-full particle" style={{ animationDelay: '1.5s', animationDuration: '2.8s' }}></div>
                </div>
-               <span className="text-[10px] animate-pulse tracking-[0.2em] font-bold text-indigo-300">COLLAPSING WAVEFUNCTION...</span>
+               
+               {/* Mystical loading messages */}
+               <div className="flex flex-col items-center space-y-2">
+                 <span className="text-xs loading-message tracking-[0.15em] font-bold text-transparent bg-clip-text bg-gradient-to-r from-indigo-300 via-purple-300 to-fuchsia-300 uppercase">
+                   Reading Quantum Signatures...
+                 </span>
+                 <span className="text-[10px] loading-message tracking-[0.1em] font-medium text-indigo-400/70 uppercase" style={{ animationDelay: '0.5s' }}>
+                   Collapsing Wavefunctions...
+                 </span>
+                 <span className="text-[10px] loading-message tracking-[0.1em] font-medium text-purple-400/70 uppercase" style={{ animationDelay: '1s' }}>
+                   Revealing Reality...
+                 </span>
+               </div>
+               
+               {/* Pulsing glow around the area */}
+               <div className="absolute -inset-8 bg-gradient-to-r from-indigo-500/20 via-purple-500/20 to-fuchsia-500/20 rounded-full blur-2xl quantum-field-loading -z-10"></div>
              </div>
           )}
           <div ref={chatEndRef} />
@@ -963,20 +1400,46 @@ const App = () => {
                 <button 
                     onClick={collapseWavefunction}
                     disabled={isComputing || rateLimitCooldown > 0}
-                    className="w-full group relative overflow-hidden rounded-lg bg-indigo-600 p-4 transition-all hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed shadow-[0_0_20px_rgba(79,70,229,0.3)] hover:shadow-[0_0_30px_rgba(79,70,229,0.5)]"
+                    className={`w-full group relative overflow-hidden rounded-xl bg-gradient-to-br from-indigo-600 via-purple-600 to-fuchsia-600 p-6 transition-all hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed ${!isComputing && rateLimitCooldown === 0 ? 'button-pulse' : ''} hover:shadow-[0_0_60px_rgba(139,92,246,0.6),0_0_100px_rgba(168,85,247,0.4)]`}
                 >
-                    <div className="relative z-10 flex items-center justify-center gap-2 font-bold text-white tracking-widest text-sm">
-                        <span>COMPUTE REALITY</span>
-                        {isComputing ? (
-                            <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                        ) : (
-                            <svg className="w-4 h-4 transition-transform group-hover:rotate-180 duration-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                            </svg>
+                    {/* Particle effects */}
+                    {!isComputing && rateLimitCooldown === 0 && (
+                        <>
+                            <div className="particle" style={{ left: '10%', animationDelay: '0s', animationDuration: '2s' }}></div>
+                            <div className="particle" style={{ left: '30%', animationDelay: '0.5s', animationDuration: '2.5s' }}></div>
+                            <div className="particle" style={{ left: '50%', animationDelay: '1s', animationDuration: '3s' }}></div>
+                            <div className="particle" style={{ left: '70%', animationDelay: '1.5s', animationDuration: '2.2s' }}></div>
+                            <div className="particle" style={{ left: '90%', animationDelay: '0.8s', animationDuration: '2.8s' }}></div>
+                        </>
+                    )}
+                    
+                    {/* Quantum wave background effect */}
+                    <div className="absolute inset-0 quantum-wave opacity-20">
+                        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent"></div>
+                    </div>
+                    
+                    {/* Main button content */}
+                    <div className="relative z-10 flex flex-col items-center justify-center gap-3">
+                        <div className="flex items-center justify-center gap-3 font-bold text-white tracking-[0.2em] text-base uppercase">
+                            <span className="drop-shadow-[0_0_10px_rgba(255,255,255,0.5)]">COMPUTE REALITY</span>
+                            {isComputing ? (
+                                <div className="w-5 h-5 border-2 border-white/50 border-t-white rounded-full animate-spin"></div>
+                            ) : (
+                                <svg className="w-5 h-5 transition-transform group-hover:rotate-180 duration-700 drop-shadow-[0_0_8px_rgba(255,255,255,0.5)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                                </svg>
+                            )}
+                        </div>
+                        {!isComputing && rateLimitCooldown === 0 && (
+                            <p className="text-[10px] text-white/70 uppercase tracking-widest font-medium">Portal to Your Quantum Truth</p>
                         )}
                     </div>
-                    {/* Button Glow Effect */}
-                    <div className="absolute inset-0 -translate-x-full group-hover:animate-[shimmer_1.5s_infinite] bg-gradient-to-r from-transparent via-white/10 to-transparent z-0" />
+                    
+                    {/* Enhanced shimmer effect */}
+                    <div className="absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-1000 bg-gradient-to-r from-transparent via-white/20 to-transparent z-0" />
+                    
+                    {/* Outer glow ring */}
+                    <div className="absolute -inset-1 bg-gradient-to-r from-indigo-500 via-purple-500 to-fuchsia-500 rounded-xl opacity-30 blur-xl group-hover:opacity-50 transition-opacity -z-10"></div>
                 </button>
             ) : (
                 <div className="text-center text-xs text-slate-500 py-4 border border-slate-800/50 bg-slate-900/20 rounded-lg border-dashed">
@@ -984,10 +1447,49 @@ const App = () => {
                 </div>
             )}
         </div>
+          </>
+        ) : (
+          <div className="flex flex-col items-center justify-center h-full p-2 space-y-4">
+            <div className="writing-vertical text-[10px] text-slate-500 uppercase tracking-widest font-bold">
+              QUANTUM ENTANGLER
+            </div>
+            <button
+              onClick={collapseWavefunction}
+              disabled={isComputing || rateLimitCooldown > 0 || nodes.length <= 1}
+              className="p-2 bg-gradient-to-br from-indigo-600 to-fuchsia-600 rounded-lg hover:scale-110 transition-transform disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Compute Reality"
+            >
+              <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+              </svg>
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
 };
 
-const root = createRoot(document.getElementById('root')!);
-root.render(<App />);
+// Ensure DOM is ready before rendering
+// Initialize React app - module scripts execute after DOM is ready
+const rootElement = document.getElementById('root');
+if (rootElement) {
+  try {
+    const root = createRoot(rootElement);
+    root.render(<App />);
+  } catch (error) {
+    console.error('Error rendering app:', error);
+    rootElement.innerHTML = `
+      <div style="display: flex; align-items: center; justify-content: center; height: 100vh; color: #ef4444; font-family: 'Space Grotesk', sans-serif; text-align: center; padding: 2rem;">
+        <div>
+          <h2 style="margin-bottom: 1rem;">Error Loading Application</h2>
+          <p style="color: #94a3b8;">${error instanceof Error ? error.message : 'Unknown error'}</p>
+          <p style="color: #64748b; margin-top: 1rem; font-size: 0.875rem;">Check the browser console (F12) for details.</p>
+          <button onclick="location.reload()" style="margin-top: 1rem; padding: 0.5rem 1rem; background: #3b82f6; color: white; border: none; border-radius: 0.25rem; cursor: pointer;">Reload Page</button>
+        </div>
+      </div>
+    `;
+  }
+} else {
+  console.error('Root element not found!');
+}

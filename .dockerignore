@@ -1,0 +1,16 @@
+node_modules
+npm-debug.log
+dist
+.git
+.gitignore
+# Note: .env.local is excluded from image for security
+# Environment variables should be passed via build args or runtime env
+.env
+*.md
+!README.md
+.vscode
+.idea
+coverage
+.DS_Store
+*.log
+

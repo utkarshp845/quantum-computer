@@ -20,8 +20,12 @@ A quantum computing visualization and AI-powered reality computation engine. Cre
 
 ### Prerequisites
 
+**Option 1: Local Development**
 - Node.js (v18 or higher)
 - npm or yarn
+
+**Option 2: Docker (Recommended)**
+- Docker and Docker Compose
 
 ### Installation
 
@@ -33,9 +37,11 @@ A quantum computing visualization and AI-powered reality computation engine. Cre
 2. **Set up environment variables:**
    Create a `.env.local` file in the root directory:
    ```
-   OPENROUTER_API_KEY=your_api_key_here
-   AI_MODEL=meta-llama/llama-3.1-8b-instruct:free
+   VITE_OPENROUTER_API_KEY=your_api_key_here
+   VITE_AI_MODEL=google/gemini-flash-1.5
    ```
+   
+   **Note:** You can also use `OPENROUTER_API_KEY` and `AI_MODEL` (without `VITE_` prefix) - both formats are supported.
    
    Get your API key: https://openrouter.ai/keys
 
@@ -46,6 +52,76 @@ A quantum computing visualization and AI-powered reality computation engine. Cre
 
 4. **Open your browser:**
    Navigate to `http://localhost:3000`
+
+## Docker Deployment
+
+### Quick Start with Docker
+
+1. **Set up environment variables:**
+   Create a `.env.local` file:
+   ```
+   VITE_OPENROUTER_API_KEY=your_api_key_here
+   VITE_AI_MODEL=google/gemini-flash-1.5
+   ```
+   
+   **Note:** Both `VITE_OPENROUTER_API_KEY` and `OPENROUTER_API_KEY` formats work. The `VITE_` prefix is recommended.
+
+2. **Development mode (with hot reload):**
+   ```bash
+   docker-compose up dev
+   ```
+   Access at `http://localhost:3000`
+
+3. **Production mode:**
+   ```bash
+   docker-compose up prod
+   ```
+   Access at `http://localhost:8080`
+
+### Docker Commands
+
+```bash
+# Build and run development container
+docker-compose up dev
+
+# Build and run production container
+docker-compose up prod
+
+# Run in background
+docker-compose up -d prod
+
+# View logs
+docker-compose logs -f dev
+
+# Stop containers
+docker-compose down
+
+# Rebuild after changes
+docker-compose build --no-cache prod
+```
+
+### Manual Docker Build
+
+**Development:**
+```bash
+docker build -f Dockerfile.dev -t quantum-entangler:dev .
+docker run -p 3000:3000 --env-file .env.local quantum-entangler:dev
+```
+
+**Production:**
+```bash
+docker build -t quantum-entangler:prod .
+docker run -p 8080:80 --env-file .env.local quantum-entangler:prod
+```
+
+### Docker Features
+
+- ✅ **Multi-stage builds** for optimized production images
+- ✅ **Hot reload** in development mode
+- ✅ **Nginx** for production serving with SPA routing
+- ✅ **Environment variable** support via `.env.local`
+- ✅ **Health check** endpoint at `/health`
+- ✅ **Gzip compression** and caching for performance
 
 ## Usage
 
@@ -93,7 +169,7 @@ OpenRouter provides:
 
 | Model | Cost | Best For |
 |-------|------|----------|
-| `meta-llama/llama-3.1-8b-instruct:free` | **FREE** | Testing, development |
+| `google/gemini-flash-1.5` | ~$0.075/1M tokens | **Default** - Fast & cheap |
 | `google/gemini-flash-1.5` | ~$0.075/1M tokens | Production, fast responses |
 | `anthropic/claude-3-haiku` | ~$0.25/1M tokens | High quality, balanced |
 | `meta-llama/llama-3.1-70b-instruct` | ~$0.59/1M tokens | Premium quality |
@@ -187,9 +263,10 @@ lsof -ti:3000 | xargs kill
 ```
 
 ### API Key Issues
-- Ensure `.env.local` contains `OPENROUTER_API_KEY=your_key`
+- Ensure `.env.local` contains `VITE_OPENROUTER_API_KEY=your_key` (or `OPENROUTER_API_KEY=your_key`)
 - Get your key from https://openrouter.ai/keys
 - Free model requires an API key but no credits
+- **For Docker:** Make sure `.env.local` exists and contains the API key before running `docker-compose up`
 
 ### Module Not Found Errors
 ```bash
