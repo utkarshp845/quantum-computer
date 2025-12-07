@@ -255,6 +255,13 @@ quantum-computer/
 └── package.json        # Dependencies and scripts
 ```
 
+## Documentation
+
+- **AWS_DEPLOYMENT.md** - Complete AWS deployment guide (S3, CloudFront, Route 53, ACM)
+- **RELIABILITY_PLAN.md** - Reliability and scalability plan for 10+ users
+- **RELIABILITY_SUMMARY.md** - Summary of reliability features implemented
+- **MONITORING_SETUP.md** - Step-by-step guide for setting up Sentry, GA4, and CloudWatch
+
 ## Troubleshooting
 
 ### Port Already in Use

@@ -614,16 +614,16 @@ const App = () => {
       return;
     }
     
-    // Debug: Check API key availability
-    const apiKeyCheck = import.meta.env.VITE_OPENROUTER_API_KEY;
-    console.log('🔍 API Key Debug:', {
-      exists: !!apiKeyCheck,
-      length: apiKeyCheck?.length || 0,
-      preview: apiKeyCheck ? `${apiKeyCheck.substring(0, 10)}...` : 'NOT SET',
-      fullEnv: import.meta.env
-    });
-    
-    console.log('Compute Reality clicked', { nodeCount: nodes.length });
+    // Debug: Check API key availability (dev only)
+    if (import.meta.env.DEV) {
+      const apiKeyCheck = import.meta.env.VITE_OPENROUTER_API_KEY;
+      console.log('🔍 API Key Debug:', {
+        exists: !!apiKeyCheck,
+        length: apiKeyCheck?.length || 0,
+        preview: apiKeyCheck ? `${apiKeyCheck.substring(0, 10)}...` : 'NOT SET',
+      });
+      console.log('Compute Reality clicked', { nodeCount: nodes.length });
+    }
     
     // Check circuit breaker
     if (!circuitBreaker.canMakeRequest()) {
@@ -767,7 +767,9 @@ REQUIREMENTS:
           // Use a working free/cheap model - fallback to free llama if model unavailable
           const model = import.meta.env.VITE_AI_MODEL || 'meta-llama/llama-3.2-3b-instruct:free';
           
-          console.log('Making API call', { model, hasApiKey: !!apiKey, promptLength: prompt.length });
+          if (import.meta.env.DEV) {
+            console.log('Making API call', { model, hasApiKey: !!apiKey, promptLength: prompt.length });
+          }
           
           // Using fetch for browser compatibility (OpenRouter supports CORS)
           const controller = new AbortController();
@@ -792,7 +794,9 @@ REQUIREMENTS:
               signal: controller.signal,
           });
           
-          console.log('API response status:', response.status, response.statusText);
+          if (import.meta.env.DEV) {
+            console.log('API response status:', response.status, response.statusText);
+          }
 
           clearTimeout(timeoutId);
 
@@ -813,7 +817,9 @@ REQUIREMENTS:
               
               // If we have retries left, wait and retry automatically
               if (retryCount < maxRetries) {
-                console.log(`API rate limited. Waiting ${waitTime}s before retry ${retryCount + 1}/${maxRetries}...`);
+                if (import.meta.env.DEV) {
+                  console.log(`API rate limited. Waiting ${waitTime}s before retry ${retryCount + 1}/${maxRetries}...`);
+                }
                 setHistory(prev => [...prev, { 
                   role: 'model', 
                   text: `⏳ API rate limit hit. Automatically retrying in ${waitTime} seconds...`, 
@@ -850,7 +856,9 @@ REQUIREMENTS:
           }
 
           const data = await response.json();
-          console.log('API response data:', data);
+          if (import.meta.env.DEV) {
+            console.log('API response data:', data);
+          }
           
           if (!data.choices || !data.choices[0] || !data.choices[0].message) {
             console.error('Invalid response format:', data);
@@ -858,7 +866,9 @@ REQUIREMENTS:
           }
           
           const text = data.choices[0].message.content || "Probability cloud too dense. Recalculate.";
-          console.log('Success! AI response:', text.substring(0, 100) + '...');
+          if (import.meta.env.DEV) {
+            console.log('Success! AI response:', text.substring(0, 100) + '...');
+          }
           
           // Track successful API call
           const duration = Date.now() - startTime;
@@ -897,7 +907,9 @@ REQUIREMENTS:
           if (retryCount <= maxRetries) {
             // Exponential backoff: wait 2s, 4s, 8s (longer delays to avoid rate limits)
             const backoffDelay = Math.pow(2, retryCount) * 1000;
-            console.log(`Retrying after ${backoffDelay/1000}s delay (attempt ${retryCount + 1}/${maxRetries + 1})...`);
+            if (import.meta.env.DEV) {
+              console.log(`Retrying after ${backoffDelay/1000}s delay (attempt ${retryCount + 1}/${maxRetries + 1})...`);
+            }
             await new Promise(resolve => setTimeout(resolve, backoffDelay));
             continue;
           }
@@ -953,7 +965,9 @@ REQUIREMENTS:
         timestamp: Date.now() 
       }]);
     } finally {
-      console.log('Compute Reality finished');
+      if (import.meta.env.DEV) {
+        console.log('Compute Reality finished');
+      }
         setIsComputing(false);
     }
   }, [nodes, links]);
