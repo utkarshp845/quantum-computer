@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Quantum Entangler - AWS S3 Deployment Script
+# Quantum Lens - AWS S3 Deployment Script
 # Usage: ./deploy.sh [--invalidate]
 
 set -e  # Exit on error
@@ -17,7 +17,7 @@ YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${BLUE}🚀 Quantum Entangler - AWS Deployment${NC}"
+echo -e "${BLUE}🚀 Quantum Lens - AWS Deployment${NC}"
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
 

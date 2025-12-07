@@ -298,9 +298,10 @@ const App = () => {
   const apiCallCountRef = useRef<number>(0);
   const rateLimitWindowRef = useRef<number>(Date.now());
   
-  // Rate limiting constants
-  const MAX_CALLS_PER_MINUTE = 10;
-  const MIN_TIME_BETWEEN_CALLS = 2000; // 2 seconds minimum between calls
+  // Rate limiting constants - Production-friendly limits
+  // Note: These are client-side limits. OpenRouter API has its own rate limits.
+  const MAX_CALLS_PER_MINUTE = 20; // Increased for production users
+  const MIN_TIME_BETWEEN_CALLS = 2000; // 2 seconds minimum (increased to avoid API rate limits)
   const RATE_LIMIT_WINDOW = 60000; // 1 minute window
 
   // Initialize AI - Using OpenRouter (cost-effective, browser-compatible)
@@ -456,24 +457,24 @@ const App = () => {
             return node.id;
         } else if (prevSelected === node.id) {
             return null; // Toggle off
-        } else {
-            // We have a source node selected, and clicked a target node
-            const existingLinkIndex = links.findIndex(l => 
+    } else {
+        // We have a source node selected, and clicked a target node
+        const existingLinkIndex = links.findIndex(l => 
                 (l.sourceId === prevSelected && l.targetId === node.id) ||
                 (l.sourceId === node.id && l.targetId === prevSelected)
-            );
+        );
 
-            if (existingLinkIndex === -1) {
-                // New Link
+        if (existingLinkIndex === -1) {
+            // New Link
                 setLinks(prev => [...prev, { sourceId: prevSelected, targetId: node.id, strength: 0.5 }]);
                 return null; // Clear selection after linking
-            } else {
-                // Select existing link
-                const link = links[existingLinkIndex];
-                setSelectedLinkId(`${link.sourceId}-${link.targetId}`);
+        } else {
+            // Select existing link
+            const link = links[existingLinkIndex];
+            setSelectedLinkId(`${link.sourceId}-${link.targetId}`);
                 return null;
-            }
         }
+    }
     });
   }, [links]);
 
@@ -520,10 +521,13 @@ const App = () => {
       }
   }
 
-  // Rate limiting check
+  // Rate limiting check - Production-friendly with first-call exception
   const checkRateLimit = (): { allowed: boolean; message?: string } => {
     const now = Date.now();
     const timeSinceLastCall = now - lastApiCallRef.current;
+    
+    // Allow first call immediately (no rate limit for first-time users)
+    const isFirstCall = lastApiCallRef.current === 0;
     
     // Reset counter if window expired (this handles the case where user waits)
     if (now - rateLimitWindowRef.current > RATE_LIMIT_WINDOW) {
@@ -533,15 +537,15 @@ const App = () => {
     }
     
     // Check if cooldown is still active (from previous rate limit hit)
-    if (rateLimitCooldown > 0) {
+    if (rateLimitCooldown > 0 && !isFirstCall) {
       return { 
         allowed: false, 
         message: `Rate limit cooldown active. Please wait ${rateLimitCooldown} second${rateLimitCooldown > 1 ? 's' : ''} before trying again.` 
       };
     }
     
-    // Check minimum time between calls
-    if (timeSinceLastCall < MIN_TIME_BETWEEN_CALLS) {
+    // Skip minimum time check for first call
+    if (!isFirstCall && timeSinceLastCall < MIN_TIME_BETWEEN_CALLS) {
       const remaining = Math.ceil((MIN_TIME_BETWEEN_CALLS - timeSinceLastCall) / 1000);
       return { 
         allowed: false, 
@@ -549,14 +553,14 @@ const App = () => {
       };
     }
     
-    // Check calls per minute
-    if (apiCallCountRef.current >= MAX_CALLS_PER_MINUTE) {
+    // Check calls per minute (allow first call even if somehow count is high)
+    if (!isFirstCall && apiCallCountRef.current >= MAX_CALLS_PER_MINUTE) {
       const windowElapsed = now - rateLimitWindowRef.current;
       const remaining = Math.ceil((RATE_LIMIT_WINDOW - windowElapsed) / 1000);
       setRateLimitCooldown(remaining);
       return { 
         allowed: false, 
-        message: `Rate limit reached. Please wait ${remaining} second${remaining > 1 ? 's' : ''} before trying again.` 
+        message: `Rate limit reached (${MAX_CALLS_PER_MINUTE} calls per minute). Please wait ${remaining} second${remaining > 1 ? 's' : ''} before trying again.` 
       };
     }
     
@@ -647,90 +651,57 @@ const App = () => {
       return `**${s.label}** ↔ **${t.label}** [${strengthDesc}]${storyContext}`;
     }).filter(Boolean).join('\n');
 
-    const prompt = `
-      You are an OMNISCIENT QUANTUM ORACLE—an all-knowing storyteller who sees the complete narrative of their life. You don't just observe their quantum field—you tell their story. You weave their nodes, probabilities, and entanglements into a personal journey that reveals who they are, where they've been, and where they're going.
-      
-      THEIR QUANTUM FIELD (The Elements of Their Story):
-      ${graphDesc}
-      
-      THE THREADS OF DESTINY (How Their Story Connects):
-      ${linksDesc || "No entanglements yet—these elements exist independently, waiting for their paths to intertwine."}
-      
-      YOUR ROLE AS STORYTELLER:
-      You are telling THEIR specific story. Reference their actual node names, probabilities, and entanglements directly. Make it personal. Make it about THEM, not a generic person.
-      
-      HOW TO TELL THEIR STORY:
-      1. **Use Their Actual Node Names**: When you mention "Photography" or "Sarah" or "Travel to Japan", use those exact names. Don't say "your passion" when you can say "your passion for Photography".
-      
-      2. **Reference Probabilities Naturally**: 
-         - If Photography has probability 0.85, say "Your passion for Photography (0.85) is deeply established—this is core to who you are"
-         - If Travel has probability 0.35, say "Your dream of Travel (0.35) is emerging—a seed of possibility just beginning to manifest"
-         - Weave these numbers into the narrative, not as technical data but as part of their story
-      
-      3. **Tell the Story of Their Entanglements**:
-         - If Photography ↔ Travel has strong connection, say "Your passion for Photography and your dream of Travel are deeply entangled—they feed each other, one inspiring the other"
-         - Make connections feel like destiny, like threads woven by fate
-      
-      4. **Structure as a Journey**:
-         - Start with where they are NOW (their current quantum state)
-         - Reveal the hidden patterns (what their entanglements mean)
-         - Show where they're heading (what the probabilities reveal about their path)
-         - Make it feel like a story with purpose and direction
-      
-      5. **Be Personal and Direct**:
-         - Use "You" and "Your" liberally
-         - Say "Your passion for [NodeName]" not "I see a passion"
-         - Make them feel like you're reading their specific story, not giving generic advice
-      
-      OUTPUT STRUCTURE (Tell Their Story This Way):
-      
-      **REALITY DESIGNATION**: 
-      [A mystical title that references their specific nodes. Examples: "The Seeker of Photography and Adventure", "The Weaver of Music and Connection", "The Dreamer of Travel and Discovery". Make it personal to their nodes.]
-      
-      **YOUR QUANTUM JOURNEY**: 
-      [This is the heart of their story. Write 3-4 paragraphs that:
-      - Open with where they are now: "In your quantum field, I see [specific nodes and their states]. Your passion for [NodeName] (probability X) is [interpretation]..."
-      - Tell the story of their connections: "The threads of destiny reveal that [Node1] and [Node2] are deeply entangled—[what this means for them personally]..."
-      - Show their path forward: "The quantum states whisper that you are [where they're heading based on probabilities and connections]..."
-      - Make it feel like you're narrating their personal journey, not analyzing data]
-      
-      **THE REVELATIONS I SEE**:
-      [2-3 profound personal insights, each referencing specific nodes. Examples:
-      1. "Your passion for [NodeName] at probability [X] reveals that you are [deep insight about their nature]..."
-      2. "The entanglement between [Node1] and [Node2] shows me that [insight about how these connect in their life]..."
-      3. "The pattern I see across your quantum field is [insight about their journey or destiny]..."
-      Make each revelation feel like a personal truth about THEM specifically.]
-      
-      **YOUR NEXT QUANTUM LEAP**:
-      [One strong, actionable insight based on their specific configuration. Reference their actual nodes. Examples:
-      - "Strengthen the entanglement between [Node1] and [Node2]—these are meant to be woven together"
-      - "Your emerging interest in [NodeName] (probability X) is calling to you—this is your next path"
-      - "The superposition in [NodeName] needs resolution—it's time to choose and manifest"
-      Make it feel like a clear next step in THEIR story, not generic advice.]
-      
-      TONE GUIDELINES:
-      - Warm, mystical, but deeply personal
-      - Speak as if you're telling their story, not analyzing their data
-      - Use second person ("You", "Your") throughout
-      - Reference specific node names naturally in sentences
-      - Make it feel like a personal oracle reading, not a chatbot response
-      - Be specific but not overly technical—weave probabilities and connections into the narrative
-      - Make them feel seen, understood, and guided
-      
-      Remember: This is THEIR story. Tell it personally. Reference their nodes. Make it about them.
-      
-      CRITICAL: You MUST complete ALL sections within the token limit:
-      - **REALITY DESIGNATION** (1-2 sentences)
-      - **YOUR QUANTUM JOURNEY** (2-3 concise paragraphs)
-      - **THE REVELATIONS I SEE** (2-3 insights, 1-2 sentences each)
-      - **YOUR NEXT QUANTUM LEAP** (1-2 sentences - MUST be included!)
-      
-      Prioritize completing all sections over length. Be concise but impactful. If you're running out of tokens, shorten earlier sections to ensure "YOUR NEXT QUANTUM LEAP" is always completed.
-    `;
+    const prompt = `You are analyzing a creative quantum visualization where a user has created nodes representing concepts, relationships, interests, and connections in their life. This is a creative/artistic tool, not a request for factual information about real people.
+
+The user has created these nodes in their quantum field visualization:
+${graphDesc}
+
+Connections between nodes:
+${linksDesc || "No entanglements—elements exist independently."}
+
+IMPORTANT CONTEXT:
+- Node names (including person names) are user-provided labels in a creative visualization
+- You are analyzing patterns and relationships in their visualization, not generating information about real people
+- Treat all node names as creative labels in a quantum field visualization
+- Focus on the relationships, probabilities, and patterns shown in the visualization
+- This is an artistic/creative analysis tool, not a factual information request
+
+OUTPUT FORMAT (be specific and concrete):
+
+**REALITY DESIGNATION**
+[One clear title using the node labels from their visualization. Example: "The Seeker of Photography and Adventure"]
+
+**CURRENT STATE ANALYSIS**
+[2 concise paragraphs analyzing their visualization:
+- What their strongest nodes (high probability) reveal about their configuration
+- How their entanglements create patterns in their visualization
+- Use the node labels they provided and probabilities. Be specific, not vague.]
+
+**KEY INSIGHTS**
+[2-3 concrete insights, each 1-2 sentences:
+1. Specific insight about a high-probability node and what it means in their visualization
+2. What a strong entanglement reveals about the patterns in their configuration
+3. What emerging nodes (low probability) suggest about potential growth
+Reference the node labels they provided and be concrete.]
+
+**ACTIONABLE NEXT STEP**
+[One specific, actionable recommendation based on their configuration. Examples:
+- "Focus on strengthening the connection between [Node1] and [Node2]—they naturally support each other"
+- "Your emerging interest in [NodeName] (probability X) is worth exploring—it aligns with your core elements"
+- "The [NodeName] node needs more attention—it's central but underdeveloped"
+Be specific and actionable, not vague.]
+
+REQUIREMENTS:
+- Use the node labels the user provided throughout (these are creative labels in their visualization)
+- Reference specific probabilities when relevant
+- Be concrete and actionable, not mystical or vague
+- Focus on patterns and relationships in their visualization, not factual claims
+- Complete all sections
+- Keep total response under 400 words`;
 
     try {
       let retryCount = 0;
-      const maxRetries = 2;
+      const maxRetries = 3; // Increased retries for better reliability
       let lastError: Error | null = null;
 
       while (retryCount <= maxRetries) {
@@ -748,7 +719,7 @@ const App = () => {
           
           // Using fetch for browser compatibility (OpenRouter supports CORS)
           const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+          const timeoutId = setTimeout(() => controller.abort(), 20000); // 20 second timeout (faster response)
           
           const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
               method: 'POST',
@@ -756,15 +727,15 @@ const App = () => {
                   'Content-Type': 'application/json',
                   'Authorization': `Bearer ${apiKey}`,
                   'HTTP-Referer': window.location.origin,
-                  'X-Title': 'Quantum Entangler',
+                  'X-Title': 'Quantum Lens',
               },
               body: JSON.stringify({
                   model: model,
                   messages: [
                       { role: 'user', content: prompt }
                   ],
-                  temperature: 1.0,
-                  max_tokens: 800, // Balanced limit: enough for full story, but cost-effective
+                  temperature: 0.7, // Lower for more focused, concrete responses
+                  max_tokens: 600, // Sufficient for concise, actionable insights
               }),
               signal: controller.signal,
           });
@@ -786,9 +757,27 @@ const App = () => {
             // Handle specific error codes
             if (response.status === 429) {
               const retryAfter = response.headers.get('Retry-After');
-              const waitTime = retryAfter ? parseInt(retryAfter) : 60;
-              setRateLimitCooldown(waitTime);
-              throw new Error(`Rate limit exceeded. Please wait ${waitTime} seconds.`);
+              const waitTime = retryAfter ? parseInt(retryAfter) : 10; // Reduced default wait time
+              
+              // If we have retries left, wait and retry automatically
+              if (retryCount < maxRetries) {
+                console.log(`API rate limited. Waiting ${waitTime}s before retry ${retryCount + 1}/${maxRetries}...`);
+                setHistory(prev => [...prev, { 
+                  role: 'model', 
+                  text: `⏳ API rate limit hit. Automatically retrying in ${waitTime} seconds...`, 
+                  timestamp: Date.now() 
+                }]);
+                await new Promise(resolve => setTimeout(resolve, waitTime * 1000));
+                retryCount++;
+                continue; // Retry the request (goes back to while loop start)
+              } else {
+                // All retries exhausted - set cooldown and throw
+                const finalWaitTime = Math.min(waitTime, 30); // Cap at 30 seconds
+                setRateLimitCooldown(finalWaitTime);
+                const rateLimitError = new Error(`API rate limit exceeded after ${maxRetries + 1} attempts. Please wait ${finalWaitTime} seconds and try again.`) as Error & { isRateLimit: boolean };
+                rateLimitError.isRateLimit = true;
+                throw rateLimitError;
+              }
             }
             
             if (response.status === 401) {
@@ -818,11 +807,11 @@ const App = () => {
           
           const text = data.choices[0].message.content || "Probability cloud too dense. Recalculate.";
           console.log('Success! AI response:', text.substring(0, 100) + '...');
-          setHistory(prev => [...prev, { role: 'model', text, timestamp: Date.now(), isComputation: true }]);
+        setHistory(prev => [...prev, { role: 'model', text, timestamp: Date.now(), isComputation: true }]);
           setAiError(null);
           return; // Success, exit retry loop
           
-        } catch (e) {
+    } catch (e) {
           lastError = e instanceof Error ? e : new Error(String(e));
           console.error('API call error (attempt ' + retryCount + '):', e);
           
@@ -836,13 +825,18 @@ const App = () => {
               console.error('Auth/credit error, not retrying');
               throw e; // Don't retry auth/credit errors
             }
+            // Don't retry if it's a 429 that we've already exhausted retries for
+            if ((e as any).isRateLimit || e.message.includes('API rate limit exceeded after')) {
+              throw e; // Already handled, don't retry again
+            }
           }
           
           retryCount++;
           
           if (retryCount <= maxRetries) {
-            // Exponential backoff: wait 1s, 2s, 4s
-            const backoffDelay = Math.pow(2, retryCount - 1) * 1000;
+            // Exponential backoff: wait 2s, 4s, 8s (longer delays to avoid rate limits)
+            const backoffDelay = Math.pow(2, retryCount) * 1000;
+            console.log(`Retrying after ${backoffDelay/1000}s delay (attempt ${retryCount + 1}/${maxRetries + 1})...`);
             await new Promise(resolve => setTimeout(resolve, backoffDelay));
             continue;
           }
@@ -870,7 +864,7 @@ const App = () => {
       }]);
     } finally {
       console.log('Compute Reality finished');
-      setIsComputing(false);
+        setIsComputing(false);
     }
   }, [nodes, links]);
 
@@ -1099,10 +1093,10 @@ const App = () => {
           return (
             <div 
               key="create-modal"
-              className="absolute z-50 glass-panel p-4 rounded-xl shadow-2xl border border-indigo-500/30 w-72 animate-in fade-in zoom-in duration-200"
+            className="absolute z-50 glass-panel p-4 rounded-xl shadow-2xl border border-indigo-500/30 w-72 animate-in fade-in zoom-in duration-200"
               style={{ left: `${left}px`, top: `${top}px` }}
-              onClick={(e) => e.stopPropagation()}
-            >
+            onClick={(e) => e.stopPropagation()}
+          >
             <h3 className="text-xs font-bold text-indigo-400 mb-2 uppercase tracking-widest flex justify-between">
                 <span>Manifest Entity</span>
                 <span className="text-slate-600">{nodes.length}/{MAX_NODES}</span>
@@ -1302,21 +1296,21 @@ const App = () => {
 
         {isRightPanelExpanded ? (
           <>
-            <div className="p-4 border-b border-slate-800/50 flex justify-between items-center bg-black/40">
-              <div>
-                <h1 className="text-lg font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-400 to-fuchsia-400 tracking-tighter">
-                    QUANTUM ENTANGLER
-                </h1>
-                <p className="text-[10px] text-slate-500 uppercase tracking-widest">Reality Computation Engine</p>
-              </div>
-              <button 
-                onClick={clearAll}
-                title="Reset Universe"
-                className="text-[10px] font-bold text-red-400 hover:text-white border border-red-900 hover:bg-red-600 bg-red-950/30 px-3 py-1.5 rounded transition-all uppercase tracking-wider"
-              >
-                 Reset
-              </button>
-            </div>
+        <div className="p-4 border-b border-slate-800/50 flex justify-between items-center bg-black/40">
+          <div>
+            <h1 className="text-lg font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-400 to-fuchsia-400 tracking-tighter">
+                QUANTUM LENS
+            </h1>
+            <p className="text-[10px] text-slate-500 uppercase tracking-widest">Reality Computation Engine</p>
+          </div>
+          <button 
+            onClick={clearAll}
+            title="Reset Universe"
+            className="text-[10px] font-bold text-red-400 hover:text-white border border-red-900 hover:bg-red-600 bg-red-950/30 px-3 py-1.5 rounded transition-all uppercase tracking-wider"
+          >
+             Reset
+          </button>
+        </div>
 
         <div className="flex-grow overflow-y-auto p-4 space-y-4">
           {history.map((msg, i) => {
@@ -1427,9 +1421,9 @@ const App = () => {
                             ) : (
                                 <svg className="w-5 h-5 transition-transform group-hover:rotate-180 duration-700 drop-shadow-[0_0_8px_rgba(255,255,255,0.5)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                                     <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
-                                </svg>
+                        </svg>
                             )}
-                        </div>
+                    </div>
                         {!isComputing && rateLimitCooldown === 0 && (
                             <p className="text-[10px] text-white/70 uppercase tracking-widest font-medium">Portal to Your Quantum Truth</p>
                         )}
@@ -1476,7 +1470,7 @@ const rootElement = document.getElementById('root');
 if (rootElement) {
   try {
     const root = createRoot(rootElement);
-    root.render(<App />);
+root.render(<App />);
   } catch (error) {
     console.error('Error rendering app:', error);
     rootElement.innerHTML = `

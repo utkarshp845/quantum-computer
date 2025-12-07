@@ -1,4 +1,4 @@
-# Quantum Entangler
+# Quantum Lens
 
 <div align="center">
 <img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
@@ -104,14 +104,14 @@ docker-compose build --no-cache prod
 
 **Development:**
 ```bash
-docker build -f Dockerfile.dev -t quantum-entangler:dev .
-docker run -p 3000:3000 --env-file .env.local quantum-entangler:dev
+docker build -f Dockerfile.dev -t quantum-lens:dev .
+docker run -p 3000:3000 --env-file .env.local quantum-lens:dev
 ```
 
 **Production:**
 ```bash
-docker build -t quantum-entangler:prod .
-docker run -p 8080:80 --env-file .env.local quantum-entangler:prod
+docker build -t quantum-lens:prod .
+docker run -p 8080:80 --env-file .env.local quantum-lens:prod
 ```
 
 ### Docker Features
@@ -193,8 +193,9 @@ View all models: https://openrouter.ai/models
 
 The application includes built-in rate limiting to prevent API abuse:
 
-- **Minimum time between calls**: 2 seconds
-- **Maximum calls per minute**: 10
+- **Minimum time between calls**: 1 second
+- **Maximum calls per minute**: 20
+- **First call exception**: New users can make their first call immediately
 - **Cooldown timer**: Automatically displayed when rate limit is reached
 - **Error handling**: Automatic retry with exponential backoff
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * Quantum Entangler - AWS S3 Deployment Script (Node.js)
+ * Quantum Lens - AWS S3 Deployment Script (Node.js)
  * Usage: node deploy.js [--invalidate]
  */
 
@@ -130,7 +130,7 @@ function invalidateCloudFront() {
 // Main deployment flow
 function main() {
   log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'blue');
-  log('🚀 Quantum Entangler - AWS Deployment', 'blue');
+  log('🚀 Quantum Lens - AWS Deployment', 'blue');
   log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'blue');
   console.log('');
   

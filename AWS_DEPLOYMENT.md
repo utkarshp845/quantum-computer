@@ -1,6 +1,6 @@
 # AWS Deployment Guide
 
-Complete guide for deploying Quantum Entangler to AWS using S3, CloudFront, Route 53, and ACM.
+Complete guide for deploying Quantum Lens to AWS using S3, CloudFront, Route 53, and ACM.
 
 ## Prerequisites
 

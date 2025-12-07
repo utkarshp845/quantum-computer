@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Quantum Entangler - AWS Setup Verification Script
+# Quantum Lens - AWS Setup Verification Script
 # This script verifies all AWS resources are properly configured
 
 set -e
