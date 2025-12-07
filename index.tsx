@@ -4,6 +4,7 @@ import { QuantumNode, EntanglementLink, ChatMessage, NodeType, GateType } from '
 import { INITIAL_STATE, applyGate, measure, getProbability, getBlochCoordinates, formatComplex } from './utils/quantumEngine';
 import { errorTracker } from './utils/errorTracker';
 import { analytics } from './utils/analytics';
+import { healthChecker } from './utils/healthCheck';
 import { circuitBreaker } from './utils/circuitBreaker';
 
 // --- Constants ---
