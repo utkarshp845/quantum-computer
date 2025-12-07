@@ -923,14 +923,14 @@ REQUIREMENTS:
   }, []);
 
   return (
-    <div className="flex h-screen w-full bg-black text-slate-200 overflow-hidden relative selection:bg-fuchsia-500/30 font-sans">
+    <div className="flex flex-col md:flex-row h-screen w-full bg-black text-slate-200 overflow-hidden relative selection:bg-fuchsia-500/30 font-sans">
       
       {/* Background Ambience */}
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,_rgba(17,24,39,1)_0%,_rgba(0,0,0,1)_100%)] z-0 pointer-events-none" />
       <div className="absolute inset-0 z-0 opacity-20 pointer-events-none" style={{ backgroundImage: 'radial-gradient(#4f46e5 1px, transparent 1px)', backgroundSize: '40px 40px' }}></div>
 
       {/* --- LEFT: The Void (Canvas) --- */}
-      <div className="relative flex-grow h-full overflow-hidden cursor-crosshair touch-none" id="quantum-void" onClick={handleCanvasClick}>
+      <div className="relative flex-grow h-full md:h-auto overflow-hidden cursor-crosshair touch-none" id="quantum-void" onClick={handleCanvasClick}>
         
         {/* Help Panel - Top Left */}
         <div className="absolute top-4 left-4 z-30">
@@ -949,7 +949,7 @@ REQUIREMENTS:
           
           {isHelpOpen && (
             <div 
-              className="glass-panel mt-2 w-80 max-w-[calc(100vw-2rem)] rounded-xl border border-indigo-500/30 shadow-2xl p-4 space-y-4 max-h-[calc(100vh-8rem)] overflow-y-auto"
+              className="glass-panel mt-2 w-80 max-w-[calc(100vw-2rem)] rounded-xl border border-indigo-500/30 shadow-2xl p-4 space-y-4 max-h-[calc(100vh-8rem)] overflow-y-auto text-sm md:text-xs"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex justify-between items-center mb-2">
@@ -1093,7 +1093,7 @@ REQUIREMENTS:
           return (
             <div 
               key="create-modal"
-            className="absolute z-50 glass-panel p-4 rounded-xl shadow-2xl border border-indigo-500/30 w-72 animate-in fade-in zoom-in duration-200"
+            className="absolute z-50 glass-panel p-4 rounded-xl shadow-2xl border border-indigo-500/30 w-72 max-w-[calc(100vw-2rem)] animate-in fade-in zoom-in duration-200"
               style={{ left: `${left}px`, top: `${top}px` }}
             onClick={(e) => e.stopPropagation()}
           >
@@ -1125,7 +1125,7 @@ REQUIREMENTS:
                     key={t}
                     type="button"
                     onClick={() => setNewNodeType(t)}
-                    className={`text-[10px] uppercase font-bold py-1.5 rounded border transition-all ${newNodeType === t ? 'bg-indigo-900 border-indigo-400 text-white shadow-[0_0_10px_rgba(99,102,241,0.3)]' : 'border-slate-800 text-slate-500 hover:border-slate-600 hover:bg-slate-900'}`}
+                    className={`text-xs md:text-[10px] uppercase font-bold py-3 md:py-1.5 rounded border transition-all touch-manipulation ${newNodeType === t ? 'bg-indigo-900 border-indigo-400 text-white shadow-[0_0_10px_rgba(99,102,241,0.3)]' : 'border-slate-800 text-slate-500 hover:border-slate-600 hover:bg-slate-900 active:bg-slate-800'}`}
                   >
                     {t}
                   </button>
@@ -1142,13 +1142,13 @@ REQUIREMENTS:
                 <button 
                     type="button" 
                     onClick={() => setIsCreating(null)}
-                    className="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold py-2 rounded transition-colors"
+                    className="flex-1 bg-slate-800 hover:bg-slate-700 active:bg-slate-600 text-slate-300 text-sm md:text-xs font-bold py-3 md:py-2 rounded transition-colors touch-manipulation min-h-[44px]"
                 >
                     CANCEL
                 </button>
                 <button 
                     type="submit" 
-                    className="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold py-2 rounded transition-colors shadow-lg shadow-indigo-500/20"
+                    className="flex-1 bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white text-sm md:text-xs font-bold py-3 md:py-2 rounded transition-colors shadow-lg shadow-indigo-500/20 touch-manipulation min-h-[44px]"
                 >
                     INITIALIZE
                 </button>
@@ -1164,7 +1164,7 @@ REQUIREMENTS:
           return (
             <div 
                 key={`node-controls-${selectedNodeObj.id}`}
-                className="absolute z-50 glass-panel p-3 rounded-lg shadow-2xl border border-white/20 animate-in fade-in zoom-in duration-200 flex flex-col gap-3 min-w-[180px]"
+                className="absolute z-50 glass-panel p-3 rounded-lg shadow-2xl border border-white/20 animate-in fade-in zoom-in duration-200 flex flex-col gap-3 min-w-[180px] max-w-[calc(100vw-2rem)]"
                 style={{ 
                     left: `${pos.left}px`, 
                     top: `${pos.top}px`,
@@ -1184,7 +1184,7 @@ REQUIREMENTS:
                         <button
                             key={gate}
                             onClick={() => applyNodeGate(gate)}
-                            className="bg-slate-800 hover:bg-indigo-600 text-slate-200 text-[10px] font-bold py-1.5 rounded border border-slate-700 transition-colors"
+                            className="bg-slate-800 hover:bg-indigo-600 active:bg-indigo-700 text-slate-200 text-sm md:text-[10px] font-bold py-2 md:py-1.5 rounded border border-slate-700 transition-colors touch-manipulation min-h-[44px]"
                             title={`Apply ${gate} Gate`}
                         >
                             {gate}
@@ -1195,7 +1195,7 @@ REQUIREMENTS:
                 {/* Measurement Button */}
                 <button 
                     onClick={measureNode}
-                    className="w-full bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 text-white text-[10px] font-bold py-1.5 rounded border border-amber-500/50 transition-all shadow-[0_0_10px_rgba(245,158,11,0.2)]"
+                    className="w-full bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 active:from-amber-700 active:to-amber-800 text-white text-sm md:text-[10px] font-bold py-3 md:py-1.5 rounded border border-amber-500/50 transition-all shadow-[0_0_10px_rgba(245,158,11,0.2)] touch-manipulation min-h-[44px]"
                 >
                     OBSERVE / COLLAPSE
                 </button>
@@ -1203,7 +1203,7 @@ REQUIREMENTS:
                 {/* Delete Button */}
                 <button 
                     onClick={() => deleteNode(selectedNodeObj.id)}
-                    className="flex items-center gap-2 text-red-400 hover:text-red-200 hover:bg-red-950/50 px-2 py-1 rounded w-full justify-center transition-colors text-[10px] font-bold"
+                    className="flex items-center gap-2 text-red-400 hover:text-red-200 active:text-red-100 hover:bg-red-950/50 active:bg-red-900/70 px-2 py-2 md:py-1 rounded w-full justify-center transition-colors text-sm md:text-[10px] font-bold touch-manipulation min-h-[44px]"
                 >
                     ERASE ENTITY
                 </button>
@@ -1244,7 +1244,7 @@ REQUIREMENTS:
                         min="0.1" max="1.0" step="0.05"
                         value={getSelectedLinkObj.strength}
                         onChange={(e) => updateLinkStrength(parseFloat(e.target.value))}
-                        className="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-fuchsia-500"
+                        className="w-full h-2 md:h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-fuchsia-500 touch-manipulation"
                     />
                     <div className="text-center text-xs font-bold text-white mt-1">
                         {(getSelectedLinkObj.strength * 100).toFixed(0)}% RESONANCE
@@ -1253,7 +1253,7 @@ REQUIREMENTS:
                 
                 <button 
                     onClick={deleteLink}
-                    className="w-full bg-red-950/50 hover:bg-red-900/80 border border-red-900 text-red-200 text-xs font-bold py-1.5 rounded transition-colors flex items-center justify-center gap-2"
+                    className="w-full bg-red-950/50 hover:bg-red-900/80 active:bg-red-800/90 border border-red-900 text-red-200 text-sm md:text-xs font-bold py-3 md:py-1.5 rounded transition-colors flex items-center justify-center gap-2 touch-manipulation min-h-[44px]"
                 >
                     SEVER CONNECTION
                 </button>
@@ -1261,8 +1261,8 @@ REQUIREMENTS:
           );
         })()}
 
-        {/* Floating Instructions - Moved to bottom right to avoid overlap with help */}
-        <div className="absolute bottom-8 right-8 pointer-events-none select-none space-y-2 opacity-40 hover:opacity-100 transition-opacity">
+        {/* Floating Instructions - Hidden on mobile, shown on desktop */}
+        <div className="hidden md:block absolute bottom-8 right-8 pointer-events-none select-none space-y-2 opacity-40 hover:opacity-100 transition-opacity">
           <div className="text-slate-500 text-[10px] font-mono border-l-2 border-slate-700 pl-3">
               <p className="mb-1"><strong className="text-slate-300">CLICK VOID</strong> :: MANIFEST</p>
               <p className="mb-1"><strong className="text-slate-300">CLICK NODE</strong> :: GATE OPS</p>
@@ -1270,18 +1270,25 @@ REQUIREMENTS:
               <p><strong className="text-slate-300">MEASURE</strong> :: COLLAPSE STATE</p>
           </div>
         </div>
+        
+        {/* Mobile Instructions - Bottom center */}
+        <div className="md:hidden absolute bottom-4 left-1/2 -translate-x-1/2 pointer-events-none select-none opacity-60">
+          <div className="text-slate-400 text-xs font-mono text-center">
+              <p><strong className="text-slate-200">TAP</strong> to create • <strong className="text-slate-200">TAP</strong> node to edit</p>
+          </div>
+        </div>
       </div>
 
       {/* --- RIGHT: The Observer (Chat/Results) --- */}
       <div 
         className={`glass-panel border-l border-slate-800 flex flex-col z-20 shadow-[0_0_50px_rgba(0,0,0,0.5)] transition-all duration-300 ease-in-out ${
-          isRightPanelExpanded ? 'w-96' : 'w-12'
+          isRightPanelExpanded ? 'w-full md:w-96' : 'w-12'
         }`}
       >
         {/* Collapse/Expand Toggle Button */}
         <button
           onClick={() => setIsRightPanelExpanded(!isRightPanelExpanded)}
-          className="absolute -left-4 top-1/2 -translate-y-1/2 z-30 bg-slate-900 border border-slate-700 hover:border-indigo-500 rounded-full p-2 shadow-lg transition-all hover:scale-110 hover:shadow-indigo-500/50"
+          className="absolute -left-4 top-1/2 -translate-y-1/2 z-30 bg-slate-900 border border-slate-700 hover:border-indigo-500 active:border-indigo-600 rounded-full p-2 md:p-2 shadow-lg transition-all hover:scale-110 active:scale-95 hover:shadow-indigo-500/50 touch-manipulation min-w-[44px] min-h-[44px] flex items-center justify-center"
           title={isRightPanelExpanded ? 'Collapse Panel' : 'Expand Panel'}
         >
           <svg 
@@ -1394,7 +1401,7 @@ REQUIREMENTS:
                 <button 
                     onClick={collapseWavefunction}
                     disabled={isComputing || rateLimitCooldown > 0}
-                    className={`w-full group relative overflow-hidden rounded-xl bg-gradient-to-br from-indigo-600 via-purple-600 to-fuchsia-600 p-6 transition-all hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed ${!isComputing && rateLimitCooldown === 0 ? 'button-pulse' : ''} hover:shadow-[0_0_60px_rgba(139,92,246,0.6),0_0_100px_rgba(168,85,247,0.4)]`}
+                    className={`w-full group relative overflow-hidden rounded-xl bg-gradient-to-br from-indigo-600 via-purple-600 to-fuchsia-600 p-6 md:p-6 transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation min-h-[60px] ${!isComputing && rateLimitCooldown === 0 ? 'button-pulse' : ''} hover:shadow-[0_0_60px_rgba(139,92,246,0.6),0_0_100px_rgba(168,85,247,0.4)]`}
                 >
                     {/* Particle effects */}
                     {!isComputing && rateLimitCooldown === 0 && (
@@ -1444,13 +1451,13 @@ REQUIREMENTS:
           </>
         ) : (
           <div className="flex flex-col items-center justify-center h-full p-2 space-y-4">
-            <div className="writing-vertical text-[10px] text-slate-500 uppercase tracking-widest font-bold">
-              QUANTUM ENTANGLER
+            <div className="writing-vertical text-[10px] text-slate-500 uppercase tracking-widest font-bold hidden md:block">
+              QUANTUM LENS
             </div>
             <button
               onClick={collapseWavefunction}
               disabled={isComputing || rateLimitCooldown > 0 || nodes.length <= 1}
-              className="p-2 bg-gradient-to-br from-indigo-600 to-fuchsia-600 rounded-lg hover:scale-110 transition-transform disabled:opacity-50 disabled:cursor-not-allowed"
+              className="p-3 md:p-2 bg-gradient-to-br from-indigo-600 to-fuchsia-600 rounded-lg hover:scale-110 active:scale-95 transition-transform disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation min-w-[56px] min-h-[56px] flex items-center justify-center"
               title="Compute Reality"
             >
               <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
