@@ -2,6 +2,9 @@ import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { createRoot } from 'react-dom/client';
 import { QuantumNode, EntanglementLink, ChatMessage, NodeType, GateType } from './types';
 import { INITIAL_STATE, applyGate, measure, getProbability, getBlochCoordinates, formatComplex } from './utils/quantumEngine';
+import { errorTracker } from './utils/errorTracker';
+import { analytics } from './utils/analytics';
+import { circuitBreaker } from './utils/circuitBreaker';
 
 // --- Constants ---
 const MAX_NODES = 20;
@@ -306,6 +309,27 @@ const App = () => {
 
   // Initialize AI - Using OpenRouter (cost-effective, browser-compatible)
   useEffect(() => {
+    // Track app initialization
+    analytics.track('app_loaded', {
+      userAgent: navigator.userAgent,
+      screenWidth: window.screen.width,
+      screenHeight: window.screen.height,
+    });
+    
+    // Global error handler
+    window.addEventListener('error', (event) => {
+      errorTracker.logError(event.error || new Error(event.message), {
+        message: event.message,
+      });
+    });
+    
+    // Unhandled promise rejection handler
+    window.addEventListener('unhandledrejection', (event) => {
+      errorTracker.logError(new Error(event.reason?.message || 'Unhandled promise rejection'), {
+        message: event.reason?.message || String(event.reason),
+      });
+    });
+    
     const apiKey = import.meta.env.VITE_OPENROUTER_API_KEY;
     if (!apiKey) {
       setHistory(prev => [...prev, {
@@ -319,6 +343,15 @@ const App = () => {
       text: "I am the Omniscient Architect. The void is empty. Manifest your reality components. Apply quantum gates to alter their probability. Measure them to fix their fate.",
       timestamp: Date.now()
     }]);
+    
+    // Start health monitoring
+    healthChecker.checkHealth().catch(console.error);
+    healthChecker.startPeriodicChecks(60000); // Check every minute
+    
+    // Cleanup on unmount
+    return () => {
+      healthChecker.stopPeriodicChecks();
+    };
   }, []);
 
   useEffect(() => {
@@ -399,6 +432,9 @@ const App = () => {
     setNodes(prev => [...prev, newNode]);
     setIsCreating(null);
     setErrorMsg(null);
+    
+    // Track analytics
+    analytics.trackNodeCreated(newNodeType);
   };
 
   const deleteNode = useCallback((id: string) => {
@@ -418,6 +454,9 @@ const App = () => {
           }
           return n;
       }));
+      
+      // Track analytics
+      analytics.trackGateApplied(gate);
   };
 
   const measureNode = () => {
@@ -464,9 +503,10 @@ const App = () => {
                 (l.sourceId === node.id && l.targetId === prevSelected)
         );
 
-        if (existingLinkIndex === -1) {
-            // New Link
+            if (existingLinkIndex === -1) {
+                // New Link
                 setLinks(prev => [...prev, { sourceId: prevSelected, targetId: node.id, strength: 0.5 }]);
+                analytics.trackEntanglementCreated();
                 return null; // Clear selection after linking
         } else {
             // Select existing link
@@ -584,6 +624,16 @@ const App = () => {
     
     console.log('Compute Reality clicked', { nodeCount: nodes.length });
     
+    // Check circuit breaker
+    if (!circuitBreaker.canMakeRequest()) {
+      const breakerState = circuitBreaker.getState();
+      const errorMsg = `Service temporarily unavailable. The API appears to be down. Please try again in a moment.`;
+      console.warn('Circuit breaker is open:', breakerState);
+      setAiError(errorMsg);
+      setTimeout(() => setAiError(null), 5000);
+      return;
+    }
+    
     // Check rate limit
     const rateLimitCheck = checkRateLimit();
     if (!rateLimitCheck.allowed) {
@@ -699,6 +749,7 @@ REQUIREMENTS:
 - Complete all sections
 - Keep total response under 400 words`;
 
+    const startTime = Date.now();
     try {
       let retryCount = 0;
       const maxRetries = 3; // Increased retries for better reliability
@@ -807,6 +858,15 @@ REQUIREMENTS:
           
           const text = data.choices[0].message.content || "Probability cloud too dense. Recalculate.";
           console.log('Success! AI response:', text.substring(0, 100) + '...');
+          
+          // Track successful API call
+          const duration = Date.now() - startTime;
+          analytics.trackApiCall(true, duration, retryCount);
+          analytics.trackComputeReality(true, nodes.length);
+          
+          // Record success in circuit breaker
+          circuitBreaker.recordSuccess();
+          
         setHistory(prev => [...prev, { role: 'model', text, timestamp: Date.now(), isComputation: true }]);
           setAiError(null);
           return; // Success, exit retry loop
@@ -846,6 +906,21 @@ REQUIREMENTS:
       // All retries failed
       const errorMessage = lastError?.message || 'Failed to connect to AI service. Please check your connection and try again.';
       console.error('All retries failed:', errorMessage);
+      
+      // Track error
+      const duration = Date.now() - startTime;
+      analytics.trackApiCall(false, duration, retryCount);
+      analytics.trackComputeReality(false, nodes.length, errorMessage);
+      errorTracker.logError(lastError || new Error(errorMessage), {
+        apiCall: {
+          endpoint: 'openrouter.ai/api/v1/chat/completions',
+          retryCount,
+        },
+      });
+      
+      // Record failure in circuit breaker
+      circuitBreaker.recordFailure();
+      
       setAiError(errorMessage);
       setHistory(prev => [...prev, { 
         role: 'model', 
@@ -856,6 +931,20 @@ REQUIREMENTS:
       // Handle errors that break out of retry loop (like auth errors)
       const errorMessage = outerError instanceof Error ? outerError.message : 'Unknown error occurred';
       console.error('Outer AI Error:', outerError);
+      
+      // Track error
+      const duration = Date.now() - startTime;
+      analytics.trackApiCall(false, duration, 0);
+      analytics.trackComputeReality(false, nodes.length, errorMessage);
+      errorTracker.logError(outerError instanceof Error ? outerError : new Error(errorMessage), {
+        apiCall: {
+          endpoint: 'openrouter.ai/api/v1/chat/completions',
+        },
+      });
+      
+      // Record failure in circuit breaker
+      circuitBreaker.recordFailure();
+      
       setAiError(errorMessage);
       setHistory(prev => [...prev, { 
         role: 'model', 
