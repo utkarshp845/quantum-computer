@@ -7,6 +7,10 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
+    "deploy": "./deploy.sh",
+    "deploy:node": "node deploy.js",
+    "verify": "./verify-aws-setup.sh",
+    "test:deploy": "./test-deployment.sh",
     "test": "vitest",
     "test:ui": "vitest --ui",
     "test:coverage": "vitest --coverage"

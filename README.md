@@ -311,6 +311,39 @@ npm run build
 npm run preview
 ```
 
+## AWS Deployment
+
+The application is deployed to AWS using S3, CloudFront, Route 53, and ACM.
+
+**Live Site:** https://quantumlens.pandeylabs.com
+
+### Quick Deploy
+
+```bash
+npm run deploy
+```
+
+This will:
+1. Build your application
+2. Upload to S3
+3. Invalidate CloudFront cache
+
+### Verify Deployment
+
+```bash
+npm run verify
+npm run test:deploy
+```
+
+### Full Deployment Guide
+
+See [AWS_DEPLOYMENT.md](./AWS_DEPLOYMENT.md) for complete setup instructions including:
+- S3 bucket configuration
+- CloudFront distribution setup
+- SSL certificate (ACM) configuration
+- Route 53 DNS setup
+- Troubleshooting guide
+
 ## Contributing
 
 1. Fork the repository
